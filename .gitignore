@@ -5,6 +5,8 @@
 /integration/bazel/bazel-*
 *.log
 /node_modules/
+/app/node_modules/
+/scrape/node_modules/
 
 # CircleCI temporary file for cache key computation.
 # See `save_month_to_file` in `.circleci/config.yml`.

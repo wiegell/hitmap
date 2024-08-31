@@ -20,6 +20,7 @@
     "@angular/router": "^18.2.0",
     "@types/d3": "^7.4.3",
     "@types/lodash-es": "^4.17.12",
+    "cheerio": "^1.0.0",
     "d3": "^7.9.0",
     "lodash-es": "^4.17.21",
     "rxjs": "~7.8.0",

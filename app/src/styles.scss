@@ -114,6 +114,21 @@ input {
 
 /**
 
+Base styling
+
+*/
+
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  background: linear-gradient(to top, #dfe9f3 0%, white 100%);
+}
+
+/**
+
 SVG styling
 
 */
@@ -121,4 +136,8 @@ SVG styling
 .svg-container {
   height: 100vh;
   width: 100vw;
+}
+
+.bold {
+  stroke-width: 3px !important;
 }

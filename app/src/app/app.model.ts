@@ -1,7 +1,13 @@
 import { AppComponent } from "./app.component";
 import { Selection } from "d3";
 
-export type NodeType = { x: number; y: number; r: number };
+export type NodeType = NodeDataType & { index: number };
+export type NodeDataType = {
+  x: number;
+  y: number;
+  r: number;
+  selected: boolean;
+};
 export type NodeSelectionType = Selection<
   SVGCircleElement,
   NodeType,
