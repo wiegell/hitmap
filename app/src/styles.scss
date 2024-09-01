@@ -121,6 +121,9 @@ Base styling
 html,
 body {
   overflow: hidden;
+  font-family: "SUSE", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
 }
 
 body {
@@ -140,4 +143,9 @@ SVG styling
 
 .bold {
   stroke-width: 3px !important;
+}
+
+.dot-text {
+  font-weight: lighter;
+  letter-spacing: 0.1em;
 }

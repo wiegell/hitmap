@@ -1,8 +1,10 @@
-import { AppComponent } from "./app.component";
+import { AppComponent } from "../app.component";
 import { Selection } from "d3";
+import { DataEntry } from "./data.model";
 
 export type NodeType = NodeDataType & { index: number };
-export type NodeDataType = {
+export type NodeDataType = DataEntry & {
+  id: number;
   x: number;
   y: number;
   r: number;
