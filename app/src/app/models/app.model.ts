@@ -16,5 +16,13 @@ export type NodeSelectionType = Selection<
   SVGSVGElement,
   unknown
 >;
-export type Edge = { source: number; target: number; id?: string };
 export type SVG = Selection<SVGSVGElement, unknown, HTMLElement, any>;
+export type G = Selection<SVGGElement, unknown, HTMLElement, any>;
+
+export enum SimulationForce {
+  CENTER = "CENTER",
+  CENTER_X = "CENTER_X",
+  CENTER_Y = "CENTER_Y",
+  LINK = "LINK",
+  COLLISION = "COLLISION",
+}

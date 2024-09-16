@@ -141,8 +141,13 @@ SVG styling
   width: 100vw;
 }
 
-.bold {
-  stroke-width: 3px !important;
+.line-group {
+  stroke-width: 1px;
+  stroke: #aaa;
+  .bold {
+    stroke-width: 3px;
+    stroke: #faa;
+  }
 }
 
 .dot-text {

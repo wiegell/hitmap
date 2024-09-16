@@ -2,6 +2,7 @@ import { Component, ElementRef, HostListener, ViewChild } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import {
   drag,
+  Force,
   forceCenter,
   forceCollide,
   forceLink,
@@ -10,52 +11,52 @@ import {
   forceX,
   forceY,
   select,
+  Simulation,
+  svg,
   timer,
 } from "d3";
 import { cloneDeep } from "lodash-es";
 import {
-  Edge,
+  G,
   NodeDataType,
   NodeSelectionType,
   NodeType,
+  SimulationForce,
   SVG,
 } from "./models/app.model";
-import { edge_data } from "./models/edges";
 import { DataEntry } from "./models/data.model";
-import { from, of } from "rxjs";
+import {
+  combineLatest,
+  from,
+  map,
+  of,
+  share,
+  shareReplay,
+  withLatestFrom,
+} from "rxjs";
 import { AbbreviationPipe } from "./pipes/abbreviation.pipe";
+import { createStandardToDataEntryMap } from "./helpers/data.helpers";
+import { generateEdges } from "./helpers/edge.helpers";
+import { Edge } from "./models/edge.model";
+import { SelectionService } from "./services/selection.service";
+import { InfoComponent } from "./components/info/info.component";
 @Component({
   selector: "app-root",
   standalone: true,
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, InfoComponent],
   templateUrl: "./app.component.html",
   styleUrl: "./app.component.scss",
 })
 export class AppComponent {
   @ViewChild("container") containerElement?: ElementRef;
 
-  private scale = 1;
   private abbreviationPipe = new AbbreviationPipe();
+  private sim?: Simulation<NodeDataType, undefined>;
 
-  @HostListener("wheel", ["$event"])
-  onScroll(event: WheelEvent) {
-    if (this.containerElement == null) throw new Error("oops no container");
-    event.preventDefault();
-
-    const zoomFactor = 0.01;
-    const deltaY = event.deltaY;
-
-    if (deltaY > 0) {
-      this.scale -= zoomFactor; // Zoom out
-    } else {
-      this.scale += zoomFactor; // Zoom in
-    }
-
-    this.containerElement.nativeElement.style.transformOrigin = `${
-      event.x * this.scale * 0.5
-    }px ${event.y * this.scale * 0.5}px`;
-    this.containerElement.nativeElement.style.transform = `scale(${this.scale})`;
-  }
+  public constructor(
+    public infoService: SelectionService,
+    public selectionService: SelectionService
+  ) {}
 
   ngOnInit(): void {
     this.initVisual();
@@ -63,61 +64,55 @@ export class AppComponent {
 
   initVisual() {
     const svg = this.initSvg();
-    const nodeData = from(this.initNodeData());
-    const edgeData = this.initEdgeData();
+    const lineGroup = this.initLineGroup(svg);
+    const nodeData$ = from(this.initNodeData()).pipe(shareReplay(1));
+    const edgeData$ = nodeData$.pipe(
+      map(createStandardToDataEntryMap),
+      withLatestFrom(nodeData$),
+      map(([standardMap, allEntries]) =>
+        generateEdges(allEntries, standardMap)
+      ),
+      shareReplay(1)
+    );
 
-    nodeData.subscribe((data) => {
-      let sim = forceSimulation(data)
+    combineLatest([nodeData$, edgeData$]).subscribe(([nodeData, edgeData]) => {
+      const edgeSelection = this.initEdgeSelection(edgeData, lineGroup);
+      const nodeSelection = this.initNodeSelection(nodeData, svg);
+
+      this.sim = forceSimulation(nodeData)
         .force(
-          "charge1",
-          forceCenter(window.innerWidth / 2, window.innerHeight / 2).strength(
-            0.05
+          SimulationForce.CENTER_X,
+          forceX(window.innerWidth / 2).strength((d) => {
+            return (
+              d == this.selectionService.selectedNode ? 0.4 : 0.1
+            ) as number;
+          })
+        )
+        .force(
+          SimulationForce.CENTER_Y,
+          forceY(window.innerHeight / 2).strength((d) => {
+            return (
+              d == this.selectionService.selectedNode ? 0.5 : 0.1
+            ) as number;
+          })
+        )
+        // .force(
+        //   SimulationForce.LINK,
+        //   forceLink(edgeData)
+        //     .strength(0.05)
+        //     .distance(() => 300)
+        // )
+        .force(
+          SimulationForce.COLLISION,
+          forceCollide((d) =>
+            d == this.selectionService.selectedNode ? 200 : d.r * 1.5
           )
-        )
-        // .force("x", forceX(window.innerWidth / 2).strength(0.05))
-        // .force("y", forceY(window.innerHeight / 2).strength(0.05))
-        .force(
-          "collision",
-          forceCollide((d) => d.r * 2)
-        )
-        .force(
-          "link",
-          forceLink(edgeData)
-            .strength(0.2)
-            .distance(() => 200)
         )
         .on("tick", ticked);
 
-      // setTimeout(() => {
-      //   sim.stop();
-      //   sim = forceSimulation(nodeData)
-      //     .force(
-      //       "charge1",
-      //       forceCenter(window.innerWidth / 2, window.innerHeight / 2).strength(1)
-      //     )
-      //     .force("collision", forceCollide(50))
-      //     .force(
-      //       "link",
-      //       forceLink(edgeData)
-      //         .strength(0.2)
-      //         .distance(() => 200)
-      //     )
-      //     .on("tick", ticked)
-      //     .stop();
-      // }, 2000);
-
-      const edgeSelection = this.initEdgeSelection(edgeData, svg);
-      const nodeSelection = this.initNodeSelection(data, svg);
-
-      // Add a drag behavior.
-      nodeSelection.call(
-        drag<SVGGElement, NodeType, SVGSVGElement>()
-          .on("start", dragstarted)
-          .on("drag", dragged)
-          .on("end", dragended)
-      );
       nodeSelection
-        .on("mouseover", function (event, d) {
+        .on("mouseover", (event, d) => {
+          this.infoService.setHoveredNode(d);
           edgeSelection.attr("class", function (e) {
             if (
               d.index == (e.source as any).index ||
@@ -128,47 +123,28 @@ export class AppComponent {
             return "";
           });
         })
-        .on("mouseout", function (event, d) {
+        .on("mouseout", (event, d) => {
+          this.infoService.setHoveredNode(undefined);
           edgeSelection.attr("class", function (e) {
             return "";
           });
         })
-        .on("click", function (event, d) {
-          setTimeout(() => {
-            nodeSelection.each((n) => (n.selected = false));
-            setTimeout(() => {
-              d.selected = true;
-              console.log("d: ", d, " event: ", event);
-            }, 100);
-          }, 100);
+        .on("mosedown", (event, d) => {
+          console.log("trigger");
+          this.infoService.setActiveNode(d);
+          d.r = 200;
+        })
+        .on("mouseup", (event, d) => {
+          this.infoService.setActiveNode(undefined);
+          this.infoService.setSelectedNode(d);
+          this.initializeForces(nodeData);
+          this.sim!.alpha(0.5).restart();
         });
 
-      // Reheat the simulation when drag starts, and fix the subject position.
-      function dragstarted(event: any) {
-        if (!event.active) sim.alphaTarget(1).restart();
-        event.subject.fx = event.subject.x;
-        event.subject.fy = event.subject.y;
-      }
-
-      // Update the subject (dragged node) position during drag.
-      function dragged(event: any) {
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-      }
-
-      // Restore the target alpha so the simulation cools after dragging ends.
-      // Unfix the subject position now that it’s no longer being dragged.
-      function dragended(event: any) {
-        if (!event.active) {
-          sim.alphaTarget(0);
-          sim.alpha(0.1);
-        }
-        event.subject.fx = null;
-        event.subject.fy = null;
-      }
-
       function ticked() {
-        nodeSelection.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
+        nodeSelection.attr("transform", (d) => {
+          return `translate(${d.x}, ${d.y})`;
+        });
         edgeSelection
           .attr("x1", (d: any) => d.source.x)
           .attr("y1", (d: any) => d.source.y)
@@ -197,21 +173,20 @@ export class AppComponent {
       });
   }
 
-  initEdgeData(): Edge[] {
-    return edge_data.map((d) => Object.create(d));
-  }
-
   initSvg() {
     const figure = select(`div.container`);
     return figure.append("svg").attr("class", "svg-container");
+  }
+
+  initLineGroup(svg: SVG) {
+    return svg.append("g").attr("class", "line-group");
   }
 
   initNodeSelection(nodes: NodeDataType[], svg: SVG) {
     const g = svg
       .selectAll(".node")
       .data(nodes as unknown[] as NodeType[])
-      .enter()
-      .append("g")
+      .join("g")
       .attr("class", "node");
 
     const circle = g
@@ -224,11 +199,15 @@ export class AppComponent {
       .append("text")
       .text((d) => this.abbreviationPipe.transform(d.productName))
       .attr("stroke", "black")
-      .attr(
-        "font-size",
-        (d) =>
-          (d.r * 1.5) /
-          (this.abbreviationPipe.transform(d.productName).length * 0.8)
+      .attr("font-size", (d) =>
+        Math.sqrt(
+          d.r * 20 -
+            Math.pow(
+              this.abbreviationPipe.transform(d.productName).length * 20,
+              0.85
+            ) *
+              10
+        )
       )
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "central")
@@ -237,14 +216,17 @@ export class AppComponent {
     return g;
   }
 
-  initEdgeSelection(edges: Edge[], svg: SVG) {
-    return svg
-      .append("g")
-      .attr("stroke", "#999")
-      .attr("stroke-opacity", 0.6)
+  initEdgeSelection(edges: Edge<DataEntry>[], lineGroup: G) {
+    return lineGroup
       .selectAll("line")
       .data(edges)
       .join("line")
-      .attr("stroke-width", "1");
+      .attr("class", "line");
+  }
+
+  initializeForces(nodes: NodeDataType[]) {
+    this.sim!.force(SimulationForce.CENTER_X)!.initialize!(nodes, Math.random);
+    this.sim!.force(SimulationForce.CENTER_Y)!.initialize!(nodes, Math.random);
+    this.sim!.force(SimulationForce.COLLISION)!.initialize!(nodes, Math.random);
   }
 }

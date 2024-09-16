@@ -1,0 +1,25 @@
+<div class="hovered">
+  <p>{{ (hoveredNode$ | async)?.productName }}</p>
+  <p>{{ (hoveredNode$ | async)?.producer }}</p>
+</div>
+@if ((selectedNode$ | async); as selectedNode){
+
+<div class="selected">
+  <p>Produkt: {{ selectedNode.productName }}</p>
+  <p>Producent: {{ selectedNode.producer }}</p>
+  <br />
+  <p>
+    <i>
+      {{
+        i18nService.getText("supportedStandards")
+          | i18n : (i18nService.chosenLanguage$ | async)
+      }}
+    </i>
+  </p>
+  @for (supportedStandard of selectedNode.approvedStandards; track
+  supportedStandard){
+  <p>{{ supportedStandard.name }} ({{ supportedStandard.version }})</p>
+  }
+</div>
+
+}

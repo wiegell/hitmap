@@ -1,5 +1,6 @@
 export type DataEntry = {
   productName: string;
+  producer?: string;
   approvedStandards: Standard[];
 };
 

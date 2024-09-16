@@ -40,7 +40,12 @@ rl.on("line", (line) => {
               // First row contains headers with product names
               // starting from third col
               if (j > 2) {
-                data.push({ productName: cellText, approvedStandards: [] });
+                const producer = extractParenthesizedSubstring(cellText);
+                data.push({
+                  productName: removeParenthesizedSubstring(cellText),
+                  producer: producer.length === 1 ? producer[0] : undefined,
+                  approvedStandards: [],
+                });
               }
             } else {
               switch (j) {
@@ -51,7 +56,6 @@ rl.on("line", (line) => {
                   standard.id = removeParenthesizedSubstring(cellText);
                   const parenthesisTexts =
                     extractParenthesizedSubstring(cellText);
-                  console.log("par", parenthesisTexts);
                   standard.version =
                     parenthesisTexts?.length == 1
                       ? parenthesisTexts[0]
@@ -77,6 +81,6 @@ rl.on("line", (line) => {
           });
       });
       const json = JSON.stringify(data, null, 2);
-      fs.writeFileSync("../app/public/data.json", json, {});
+      fs.writeFileSync("../app/public/assets/data.json", json, {});
     });
 });

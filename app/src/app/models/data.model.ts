@@ -1,8 +1,10 @@
-export type DataEntry = {
+import { SimulationNodeDatum } from "d3";
+
+export interface DataEntry extends SimulationNodeDatum {
   productName: string;
   producer?: string;
   approvedStandards: Standard[];
-};
+}
 
 export type Standard = {
   channel?: Channel;
