@@ -1,7 +1,9 @@
 import { Component, ElementRef, HostListener, ViewChild } from "@angular/core";
 import { RouterOutlet } from "@angular/router";
 import {
+  active,
   drag,
+  easeCubicOut,
   Force,
   forceCenter,
   forceCollide,
@@ -27,11 +29,17 @@ import {
 import { DataEntry } from "./models/data.model";
 import {
   combineLatest,
+  distinctUntilChanged,
   from,
   map,
+  multicast,
   of,
+  ReplaySubject,
   share,
   shareReplay,
+  Subject,
+  take,
+  tap,
   withLatestFrom,
 } from "rxjs";
 import { AbbreviationPipe } from "./pipes/abbreviation.pipe";
@@ -40,6 +48,7 @@ import { generateEdges } from "./helpers/edge.helpers";
 import { Edge } from "./models/edge.model";
 import { SelectionService } from "./services/selection.service";
 import { InfoComponent } from "./components/info/info.component";
+import { consumerBeforeComputation } from "@angular/core/primitives/signals";
 @Component({
   selector: "app-root",
   standalone: true,
@@ -48,110 +57,192 @@ import { InfoComponent } from "./components/info/info.component";
   styleUrl: "./app.component.scss",
 })
 export class AppComponent {
+  // Misc
   @ViewChild("container") containerElement?: ElementRef;
+  abbreviationPipe = new AbbreviationPipe();
+  domCreatedSubject = new Subject<true>();
+  domCreated$ = this.domCreatedSubject.asObservable();
 
-  private abbreviationPipe = new AbbreviationPipe();
-  private sim?: Simulation<NodeDataType, undefined>;
+  // Visual constants
+  hoverRadiusAddition = 1;
+  activeRadiusAddition = 3;
+
+  // Data
+  nodeData$ = from(this.initNodeData()).pipe(shareReplay(1));
+  edgeData$ = this.nodeData$.pipe(
+    map(createStandardToDataEntryMap),
+    withLatestFrom(this.nodeData$),
+    map(([standardMap, allEntries]) => generateEdges(allEntries, standardMap)),
+    shareReplay(1)
+  );
+
+  // D3 Simulation
+  sim?: Simulation<NodeDataType, undefined>;
+
+  // D3 Selections
+  svg$ = this.domCreated$.pipe(map(this.initSvg), share());
+  lineGroup$ = this.svg$.pipe(map(this.initLineGroup), share());
+  edgeSelection$ = combineLatest([this.edgeData$, this.lineGroup$]).pipe(
+    map(([edgeData, lineGroup]) => this.initEdgeSelection(edgeData, lineGroup)),
+    share()
+  );
+  nodeSelection$ = combineLatest([this.nodeData$, this.svg$]).pipe(
+    map(([nodeData, svg]) => this.initNodeSelection(nodeData, svg)),
+    share()
+  );
 
   public constructor(
     public infoService: SelectionService,
     public selectionService: SelectionService
-  ) {}
-
-  ngOnInit(): void {
-    this.initVisual();
-  }
-
-  initVisual() {
-    const svg = this.initSvg();
-    const lineGroup = this.initLineGroup(svg);
-    const nodeData$ = from(this.initNodeData()).pipe(shareReplay(1));
-    const edgeData$ = nodeData$.pipe(
-      map(createStandardToDataEntryMap),
-      withLatestFrom(nodeData$),
-      map(([standardMap, allEntries]) =>
-        generateEdges(allEntries, standardMap)
-      ),
-      shareReplay(1)
+  ) {
+    // Kickoff simulation
+    combineLatest([this.nodeSelection$, this.edgeSelection$]).subscribe(
+      ([nodeSelection, edgeSelection]) => {
+        this.initSimulation(() => {
+          nodeSelection.attr("transform", (d) => {
+            return `translate(${d.x}, ${d.y})`;
+          });
+          edgeSelection
+            .attr("x1", (d: any) => d.source.x)
+            .attr("y1", (d: any) => d.source.y)
+            .attr("x2", (d: any) => d.target.x)
+            .attr("y2", (d: any) => d.target.y);
+        });
+      }
     );
 
-    combineLatest([nodeData$, edgeData$]).subscribe(([nodeData, edgeData]) => {
-      const edgeSelection = this.initEdgeSelection(edgeData, lineGroup);
-      const nodeSelection = this.initNodeSelection(nodeData, svg);
-
-      this.sim = forceSimulation(nodeData)
-        .force(
-          SimulationForce.CENTER_X,
-          forceX(window.innerWidth / 2).strength((d) => {
-            return (
-              d == this.selectionService.selectedNode ? 0.4 : 0.1
-            ) as number;
-          })
-        )
-        .force(
-          SimulationForce.CENTER_Y,
-          forceY(window.innerHeight / 2).strength((d) => {
-            return (
-              d == this.selectionService.selectedNode ? 0.5 : 0.1
-            ) as number;
-          })
-        )
-        // .force(
-        //   SimulationForce.LINK,
-        //   forceLink(edgeData)
-        //     .strength(0.05)
-        //     .distance(() => 300)
-        // )
-        .force(
-          SimulationForce.COLLISION,
-          forceCollide((d) =>
-            d == this.selectionService.selectedNode ? 200 : d.r * 1.5
-          )
-        )
-        .on("tick", ticked);
-
-      nodeSelection
-        .on("mouseover", (event, d) => {
-          this.infoService.setHoveredNode(d);
-          edgeSelection.attr("class", function (e) {
-            if (
-              d.index == (e.source as any).index ||
-              d.index == (e.target as any).index
-            ) {
-              return "bold";
-            }
-            return "";
-          });
-        })
-        .on("mouseout", (event, d) => {
-          this.infoService.setHoveredNode(undefined);
-          edgeSelection.attr("class", function (e) {
-            return "";
-          });
-        })
-        .on("mosedown", (event, d) => {
-          console.log("trigger");
-          this.infoService.setActiveNode(d);
-          d.r = 200;
-        })
-        .on("mouseup", (event, d) => {
-          this.infoService.setActiveNode(undefined);
-          this.infoService.setSelectedNode(d);
-          this.initializeForces(nodeData);
-          this.sim!.alpha(0.5).restart();
-        });
-
-      function ticked() {
-        nodeSelection.attr("transform", (d) => {
-          return `translate(${d.x}, ${d.y})`;
-        });
-        edgeSelection
-          .attr("x1", (d: any) => d.source.x)
-          .attr("y1", (d: any) => d.source.y)
-          .attr("x2", (d: any) => d.target.x)
-          .attr("y2", (d: any) => d.target.y);
-      }
+    // Effects, hover edges
+    combineLatest([
+      this.selectionService.hoveredNode$,
+      this.edgeSelection$,
+      this.nodeSelection$,
+    ]).subscribe(([hoveredNode, edgeSelection]) => {
+      // Edges, hover
+      edgeSelection.attr("class", function (e) {
+        if (
+          hoveredNode?.index == (e.source as any).index ||
+          hoveredNode?.index == (e.target as any).index
+        ) {
+          return "bold";
+        }
+        return "";
+      });
     });
+
+    // Effects, hover nodes
+    combineLatest([
+      this.nodeSelection$,
+      this.selectionService.selectedNode$,
+      this.selectionService.hoveredNode$,
+    ]).subscribe(([nodeSelection, selectedNode, hoveredNode]) => {
+      // Node, hover
+      nodeSelection
+        .filter(
+          (d: NodeType) =>
+            hoveredNode != null && hoveredNode === d && selectedNode !== d
+        )
+        .select("circle")
+        .transition()
+        .duration(200)
+        .ease(easeCubicOut)
+        .attr("r", (d) => d.r + this.hoverRadiusAddition);
+      nodeSelection
+        .filter(
+          (d: NodeType) =>
+            hoveredNode != null && hoveredNode !== d && selectedNode !== d
+        )
+        .select("circle")
+        .transition()
+        .duration(200)
+        .ease(easeCubicOut)
+        .attr("r", (d) => d.base_r);
+    });
+
+    // Effects, nodes active
+    combineLatest([
+      this.nodeSelection$,
+      this.selectionService.selectedNode$,
+      this.selectionService.activeNode$,
+    ]).subscribe(([nodeSelection, selectedNode, activeNode]) => {
+      // Node, active
+      nodeSelection
+        .filter(
+          (d: NodeType) =>
+            activeNode != null && activeNode === d && selectedNode !== d
+        )
+        .select("circle")
+        .attr("r", (d) => d.r + this.activeRadiusAddition);
+      nodeSelection
+        .filter(
+          (d: NodeType) =>
+            activeNode != null && activeNode !== d && selectedNode !== d
+        )
+        .select("circle")
+        .attr("r", (d) => d.base_r);
+    });
+
+    // Mouse handlers
+    combineLatest([this.nodeData$, this.nodeSelection$]).subscribe(
+      ([nodeData, nodeSelection]) => {
+        nodeSelection
+          .on("mouseover", (event, d) => {
+            this.infoService.setHoveredNode(d);
+          })
+          .on("mouseout", (event, d) => {
+            this.infoService.setHoveredNode(this.infoService.selectedNode);
+          })
+          .on("mousedown", (event, d) => {
+            this.infoService.setActiveNode(d);
+          })
+          .on("mouseup", (event, d) => {
+            this.infoService.setActiveNode(undefined);
+            this.infoService.setSelectedNode(d);
+            this.initializeForces(nodeData);
+            this.sim!.alpha(0.5).restart();
+          });
+      }
+    );
+  }
+
+  ngAfterViewInit(): void {
+    this.domCreatedSubject.next(true);
+  }
+
+  initSimulation(ticked: () => void) {
+    combineLatest([this.nodeData$, this.edgeData$]).subscribe(
+      ([nodeData, edgeData]) => {
+        this.sim = forceSimulation(nodeData)
+          .force(
+            SimulationForce.CENTER_X,
+            forceX(window.innerWidth / 2).strength((d) => {
+              return (
+                d == this.selectionService.selectedNode ? 0.4 : 0.1
+              ) as number;
+            })
+          )
+          .force(
+            SimulationForce.CENTER_Y,
+            forceY(window.innerHeight / 2).strength((d) => {
+              return (
+                d == this.selectionService.selectedNode ? 0.5 : 0.1
+              ) as number;
+            })
+          )
+          // .force(
+          //   SimulationForce.LINK,
+          //   forceLink(edgeData)
+          //     .strength(0.05)
+          //     .distance(() => 300)
+          // )
+          .force(
+            SimulationForce.COLLISION,
+            forceCollide((d) =>
+              d == this.selectionService.selectedNode ? 200 : d.r * 1.5
+            )
+          )
+          .on("tick", ticked);
+      }
+    );
   }
 
   initNodeData(): Promise<NodeDataType[]> {
@@ -166,6 +257,7 @@ export class AppComponent {
               x: window.innerWidth / 2,
               y: window.innerHeight / 2,
               r: 15 + d.approvedStandards.length * 1.5,
+              base_r: 15 + d.approvedStandards.length * 1.5,
               selected: false,
             };
           }

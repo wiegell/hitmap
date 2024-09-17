@@ -8,6 +8,7 @@ export type NodeDataType = DataEntry & {
   x: number;
   y: number;
   r: number;
+  base_r: number;
   selected: boolean;
 };
 export type NodeSelectionType = Selection<

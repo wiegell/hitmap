@@ -135,6 +135,14 @@ body {
 SVG styling
 
 */
+g,
+text {
+  user-select: none;
+}
+
+text {
+  pointer-events: none;
+}
 
 .svg-container {
   height: 100vh;
