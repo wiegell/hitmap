@@ -16,8 +16,14 @@ import {
   Simulation,
   svg,
   timer,
+  zoom,
+  ZoomBehavior,
+  zoomIdentity,
+  zoomTransform,
+  D3ZoomEvent,
+  Selection,
 } from "d3";
-import { cloneDeep } from "lodash-es";
+import { cloneDeep, transform } from "lodash-es";
 import {
   G,
   NodeDataType,
@@ -81,12 +87,16 @@ export class AppComponent {
 
   // D3 Selections
   svg$ = this.domCreated$.pipe(map(this.initSvg), share());
-  lineGroup$ = this.svg$.pipe(map(this.initLineGroup), share());
+  containerGraph$ = this.svg$.pipe(
+    map((svg) => svg.append("g")),
+    share()
+  );
+  lineGroup$ = this.containerGraph$.pipe(map(this.initLineGroup), share());
   edgeSelection$ = combineLatest([this.edgeData$, this.lineGroup$]).pipe(
     map(([edgeData, lineGroup]) => this.initEdgeSelection(edgeData, lineGroup)),
     share()
   );
-  nodeSelection$ = combineLatest([this.nodeData$, this.svg$]).pipe(
+  nodeSelection$ = combineLatest([this.nodeData$, this.containerGraph$]).pipe(
     map(([nodeData, svg]) => this.initNodeSelection(nodeData, svg)),
     share()
   );
@@ -110,6 +120,16 @@ export class AppComponent {
         });
       }
     );
+
+    // Setup zoom
+    combineLatest([this.svg$, this.containerGraph$]).subscribe(([svg, g]) => {
+      const z = zoom().on("zoom", (e: D3ZoomEvent<Element, unknown>) => {
+        g.attr("transform", e.transform.toString());
+      });
+      (svg as unknown as Selection<Element, unknown, HTMLElement, any>)
+        .call(z)
+        .call(z.transform, zoomIdentity);
+    });
 
     // Effects, hover edges
     combineLatest([
@@ -137,24 +157,20 @@ export class AppComponent {
     ]).subscribe(([nodeSelection, selectedNode, hoveredNode]) => {
       // Node, hover
       nodeSelection
-        .filter(
-          (d: NodeType) =>
-            hoveredNode != null && hoveredNode === d && selectedNode !== d
-        )
+        .filter((d: NodeType) => hoveredNode === d && selectedNode !== d)
         .select("circle")
         .transition()
         .duration(200)
         .ease(easeCubicOut)
+        .attr("stroke-width", 2)
         .attr("r", (d) => d.r + this.hoverRadiusAddition);
       nodeSelection
-        .filter(
-          (d: NodeType) =>
-            hoveredNode != null && hoveredNode !== d && selectedNode !== d
-        )
+        .filter((d: NodeType) => hoveredNode !== d && selectedNode !== d)
         .select("circle")
         .transition()
         .duration(200)
         .ease(easeCubicOut)
+        .attr("stroke-width", 1)
         .attr("r", (d) => d.base_r);
     });
 
@@ -166,17 +182,11 @@ export class AppComponent {
     ]).subscribe(([nodeSelection, selectedNode, activeNode]) => {
       // Node, active
       nodeSelection
-        .filter(
-          (d: NodeType) =>
-            activeNode != null && activeNode === d && selectedNode !== d
-        )
+        .filter((d: NodeType) => activeNode === d && selectedNode !== d)
         .select("circle")
         .attr("r", (d) => d.r + this.activeRadiusAddition);
       nodeSelection
-        .filter(
-          (d: NodeType) =>
-            activeNode != null && activeNode !== d && selectedNode !== d
-        )
+        .filter((d: NodeType) => activeNode !== d && selectedNode !== d)
         .select("circle")
         .attr("r", (d) => d.base_r);
     });
@@ -192,9 +202,13 @@ export class AppComponent {
             this.infoService.setHoveredNode(this.infoService.selectedNode);
           })
           .on("mousedown", (event, d) => {
+            // stopPropagation is needed for the zoom handler not to
+            // consume the mouseup event for some reason
+            event.stopPropagation();
             this.infoService.setActiveNode(d);
           })
           .on("mouseup", (event, d) => {
+            console.log("mouseup");
             this.infoService.setActiveNode(undefined);
             this.infoService.setSelectedNode(d);
             this.initializeForces(nodeData);
@@ -216,7 +230,7 @@ export class AppComponent {
             SimulationForce.CENTER_X,
             forceX(window.innerWidth / 2).strength((d) => {
               return (
-                d == this.selectionService.selectedNode ? 0.4 : 0.1
+                d == this.selectionService.selectedNode ? 0.1 : 0.1
               ) as number;
             })
           )
@@ -224,7 +238,7 @@ export class AppComponent {
             SimulationForce.CENTER_Y,
             forceY(window.innerHeight / 2).strength((d) => {
               return (
-                d == this.selectionService.selectedNode ? 0.5 : 0.1
+                d == this.selectionService.selectedNode ? 0.1 : 0.1
               ) as number;
             })
           )
@@ -237,7 +251,7 @@ export class AppComponent {
           .force(
             SimulationForce.COLLISION,
             forceCollide((d) =>
-              d == this.selectionService.selectedNode ? 200 : d.r * 1.5
+              d == this.selectionService.selectedNode ? 250 : d.r * 1.5
             )
           )
           .on("tick", ticked);
@@ -270,11 +284,11 @@ export class AppComponent {
     return figure.append("svg").attr("class", "svg-container");
   }
 
-  initLineGroup(svg: SVG) {
+  initLineGroup(svg: G) {
     return svg.append("g").attr("class", "line-group");
   }
 
-  initNodeSelection(nodes: NodeDataType[], svg: SVG) {
+  initNodeSelection(nodes: NodeDataType[], svg: G) {
     const g = svg
       .selectAll(".node")
       .data(nodes as unknown[] as NodeType[])
