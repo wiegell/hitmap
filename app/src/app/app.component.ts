@@ -18,10 +18,11 @@ import {
   timer,
   zoom,
   ZoomBehavior,
-  zoomIdentity,
-  zoomTransform,
   D3ZoomEvent,
   Selection,
+  ZoomTransform,
+  zoomTransform,
+  zoomIdentity,
 } from "d3";
 import { cloneDeep, transform } from "lodash-es";
 import {
@@ -54,7 +55,7 @@ import { generateEdges } from "./helpers/edge.helpers";
 import { Edge } from "./models/edge.model";
 import { SelectionService } from "./services/selection.service";
 import { InfoComponent } from "./components/info/info.component";
-import { consumerBeforeComputation } from "@angular/core/primitives/signals";
+import { OptionsService } from "./services/options.service";
 @Component({
   selector: "app-root",
   standalone: true,
@@ -78,7 +79,8 @@ export class AppComponent {
   edgeData$ = this.nodeData$.pipe(
     map(createStandardToDataEntryMap),
     withLatestFrom(this.nodeData$),
-    map(([standardMap, allEntries]) => generateEdges(allEntries, standardMap)),
+    // map(([standardMap, allEntries]) => generateEdges(allEntries, standardMap)),
+    map(() => []),
     shareReplay(1)
   );
 
@@ -103,7 +105,8 @@ export class AppComponent {
 
   public constructor(
     public infoService: SelectionService,
-    public selectionService: SelectionService
+    public selectionService: SelectionService,
+    public optionsService: OptionsService
   ) {
     // Kickoff simulation
     combineLatest([this.nodeSelection$, this.edgeSelection$]).subscribe(
@@ -121,15 +124,43 @@ export class AppComponent {
       }
     );
 
-    // Setup zoom
-    combineLatest([this.svg$, this.containerGraph$]).subscribe(([svg, g]) => {
+    // Setup zoom event handler
+    combineLatest([
+      this.svg$,
+      // This is the initial value read from url
+      this.optionsService.zoom$.pipe(take(1)),
+      this.containerGraph$,
+    ]).subscribe(([svg, zoomOptions, g]) => {
+      // TODO: This handler is probably being set more than once
+      // on multiple emits
       const z = zoom().on("zoom", (e: D3ZoomEvent<Element, unknown>) => {
-        g.attr("transform", e.transform.toString());
+        this.optionsService.zoomTransform(e.transform);
       });
       (svg as unknown as Selection<Element, unknown, HTMLElement, any>)
         .call(z)
-        .call(z.transform, zoomIdentity);
+        .call(
+          z.transform,
+          zoomIdentity
+            .translate(zoomOptions.x, zoomOptions.y)
+            .scale(zoomOptions.k)
+        );
     });
+    // Perform zoom action
+    combineLatest([this.optionsService.zoom$, this.containerGraph$]).subscribe(
+      ([zoomTransform, g]) => {
+        console.log("zt", zoomTransform);
+        if (zoomTransform instanceof ZoomTransform) {
+          g.attr("transform", zoomTransform.toString());
+        } else {
+          const instantiated = new ZoomTransform(
+            zoomTransform.k,
+            zoomTransform.x,
+            zoomTransform.y
+          );
+          g.attr("transform", instantiated.toString());
+        }
+      }
+    );
 
     // Effects, hover edges
     combineLatest([
@@ -230,7 +261,7 @@ export class AppComponent {
             SimulationForce.CENTER_X,
             forceX(window.innerWidth / 2).strength((d) => {
               return (
-                d == this.selectionService.selectedNode ? 0.1 : 0.1
+                d == this.selectionService.selectedNode ? 0.5 : 0.1
               ) as number;
             })
           )
@@ -238,7 +269,7 @@ export class AppComponent {
             SimulationForce.CENTER_Y,
             forceY(window.innerHeight / 2).strength((d) => {
               return (
-                d == this.selectionService.selectedNode ? 0.1 : 0.1
+                d == this.selectionService.selectedNode ? 0.5 : 0.1
               ) as number;
             })
           )

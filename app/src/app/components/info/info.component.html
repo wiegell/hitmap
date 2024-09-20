@@ -1,12 +1,12 @@
 <div class="hovered">
   <p>{{ (hoveredNode$ | async)?.productName }}</p>
-  <p>{{ (hoveredNode$ | async)?.producer }}</p>
+  <p>{{ (hoveredNode$ | async)?.vendor }}</p>
 </div>
 @if ((selectedNode$ | async); as selectedNode){
 
 <div class="selected">
   <p>Produkt: {{ selectedNode.productName }}</p>
-  <p>Producent: {{ selectedNode.producer }}</p>
+  <p>Producent: {{ selectedNode.vendor }}</p>
   <br />
   <p>
     <i>

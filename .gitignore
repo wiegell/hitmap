@@ -1,6 +1,7 @@
 .DS_STORE
 
 /dist/
+/scrape/dist/
 /bazel-out
 /integration/bazel/bazel-*
 *.log
