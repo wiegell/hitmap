@@ -26,7 +26,6 @@ export class SelectionService {
   // Active
   private activeNode = new BehaviorSubject<DataEntry | undefined>(undefined);
   public setActiveNode(node: DataEntry | undefined) {
-    console.log("setting active", node);
     this.activeNode.next(node);
   }
   public activeNode$ = this.activeNode.asObservable();

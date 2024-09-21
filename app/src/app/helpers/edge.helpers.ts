@@ -23,6 +23,5 @@ export function generateEdges(
       })
     )
   );
-  console.log("map", standardMap);
   return map;
 }

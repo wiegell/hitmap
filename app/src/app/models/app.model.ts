@@ -9,6 +9,8 @@ export type NodeDataType = DataEntry & {
   y: number;
   r: number;
   base_r: number;
+  mainFontSize: number;
+  subFontSize: number;
   selected: boolean;
 };
 export type NodeSelectionType = Selection<

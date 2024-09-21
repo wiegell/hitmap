@@ -35,7 +35,6 @@ export class OptionsService {
     const zoomParam = this.getZoomParam();
     let zoomOptions: ZoomOptions;
     if (zoomParam != null && zoomParam != "") {
-      console.log("from", zoomParam);
       zoomOptions = ZoomOptions.fromBase64UrlEncoded(zoomParam);
     } else {
       zoomOptions = new ZoomOptions(1, 0, 0);
@@ -50,9 +49,7 @@ export class OptionsService {
     // );
 
     // Update url on options changes
-    console.log("constructor");
     this.zoom$.pipe(debounceTime(200)).subscribe((options) => {
-      console.log("debounced options", options);
       if (options instanceof ZoomOptions) this.setZoomParam(options);
       else {
         const zoomOptions = new ZoomOptions(options.k, options.x, options.y);

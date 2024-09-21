@@ -118,10 +118,15 @@ Base styling
 
 */
 
+@font-face {
+  font-family: "Menlo assets";
+  src: url(/assets/Menlo-Regular.ttf) format("truetype");
+}
+
 html,
 body {
   overflow: hidden;
-  font-family: "SUSE", sans-serif;
+  font-family: "Menlo assets", "SUSE", sans-serif;
   font-optical-sizing: auto;
   font-style: normal;
 }
@@ -142,6 +147,7 @@ text {
 
 text {
   pointer-events: none;
+  stroke-width: 0;
 }
 
 .svg-container {
@@ -160,5 +166,4 @@ text {
 
 .dot-text {
   font-weight: lighter;
-  letter-spacing: 0.1em;
 }

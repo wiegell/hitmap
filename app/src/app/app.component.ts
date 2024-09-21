@@ -56,6 +56,12 @@ import { Edge } from "./models/edge.model";
 import { SelectionService } from "./services/selection.service";
 import { InfoComponent } from "./components/info/info.component";
 import { OptionsService } from "./services/options.service";
+import {
+  adjustFontSizeToFitCircle,
+  calculateFontSizeForCircle,
+  calculateUnadjustedFontSize,
+} from "./helpers/font-size.helpers";
+
 @Component({
   selector: "app-root",
   standalone: true,
@@ -73,9 +79,16 @@ export class AppComponent {
   // Visual constants
   hoverRadiusAddition = 1;
   activeRadiusAddition = 3;
+  circlePaddingFraction = 0.1;
 
   // Data
-  nodeData$ = from(this.initNodeData()).pipe(shareReplay(1));
+  nodeData$ = from(
+    this.initNodeData(
+      (d) => d.productName.length,
+      (d) => (d.vendor ?? "").length,
+      this.circlePaddingFraction
+    )
+  ).pipe(shareReplay(1));
   edgeData$ = this.nodeData$.pipe(
     map(createStandardToDataEntryMap),
     withLatestFrom(this.nodeData$),
@@ -148,7 +161,6 @@ export class AppComponent {
     // Perform zoom action
     combineLatest([this.optionsService.zoom$, this.containerGraph$]).subscribe(
       ([zoomTransform, g]) => {
-        console.log("zt", zoomTransform);
         if (zoomTransform instanceof ZoomTransform) {
           g.attr("transform", zoomTransform.toString());
         } else {
@@ -239,7 +251,6 @@ export class AppComponent {
             this.infoService.setActiveNode(d);
           })
           .on("mouseup", (event, d) => {
-            console.log("mouseup");
             this.infoService.setActiveNode(undefined);
             this.infoService.setSelectedNode(d);
             this.initializeForces(nodeData);
@@ -273,16 +284,10 @@ export class AppComponent {
               ) as number;
             })
           )
-          // .force(
-          //   SimulationForce.LINK,
-          //   forceLink(edgeData)
-          //     .strength(0.05)
-          //     .distance(() => 300)
-          // )
           .force(
             SimulationForce.COLLISION,
             forceCollide((d) =>
-              d == this.selectionService.selectedNode ? 250 : d.r * 1.5
+              d == this.selectionService.selectedNode ? 250 : d.r * 1.2
             )
           )
           .on("tick", ticked);
@@ -290,13 +295,20 @@ export class AppComponent {
     );
   }
 
-  initNodeData(): Promise<NodeDataType[]> {
+  initNodeData(
+    textLengthForMainFontSizeCalculation: (d: DataEntry) => number,
+    textLengthForSubFontSizeCalculation: (d: DataEntry) => number,
+    paddingFraction: number
+  ): Promise<NodeDataType[]> {
     return fetch("/assets/data.json")
       .then((res) => res.text())
       .then((body) => {
         return (JSON.parse(body) as DataEntry[]).map(
           (d: DataEntry, i: number) => {
-            return {
+            const nodeData: Omit<
+              Omit<NodeDataType, "mainFontSize">,
+              "subFontSize"
+            > = {
               ...d,
               id: i,
               x: window.innerWidth / 2,
@@ -305,6 +317,18 @@ export class AppComponent {
               base_r: 15 + d.approvedStandards.length * 1.5,
               selected: false,
             };
+            const mainFontSize = calculateFontSizeForCircle(
+              textLengthForMainFontSizeCalculation(d),
+              nodeData.r,
+              paddingFraction
+            );
+            const subFontSize = calculateFontSizeForCircle(
+              textLengthForSubFontSizeCalculation(d),
+              nodeData.r,
+              paddingFraction,
+              (mainFontSize / 2) * 1.2
+            );
+            return { ...nodeData, mainFontSize, subFontSize };
           }
         );
       });
@@ -332,23 +356,22 @@ export class AppComponent {
       .attr("fill", "white")
       .attr("stroke", "black");
 
-    const text = g
+    const mainText = g
       .append("text")
-      .text((d) => this.abbreviationPipe.transform(d.productName))
-      .attr("stroke", "black")
-      .attr("font-size", (d) =>
-        Math.sqrt(
-          d.r * 20 -
-            Math.pow(
-              this.abbreviationPipe.transform(d.productName).length * 20,
-              0.85
-            ) *
-              10
-        )
-      )
+      .text((d) => d.productName)
+      .attr("font-size", (d) => d.mainFontSize)
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "central")
       .attr("class", "dot-text");
+
+    // const subText = g
+    //   .append("text")
+    //   .text((d) => d.vendor ?? "")
+    //   .attr("font-size", (d) => d.subFontSize)
+    //   .attr("text-anchor", "middle")
+    //   .attr("dominant-baseline", "central")
+    //   .attr("transform", (d) => `translate(0,${d.mainFontSize * 0.75})`)
+    //   .attr("class", "dot-text");
 
     return g;
   }
