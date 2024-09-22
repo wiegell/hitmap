@@ -4,7 +4,6 @@ import {
   D3ZoomEvent,
   easeCubicOut,
   forceLink,
-  forceManyBody,
   forceSimulation,
   select,
   Selection,
@@ -25,8 +24,14 @@ import {
 } from "rxjs";
 import { InfoComponent } from "./components/info/info.component";
 import { vendorCollide } from "./custom-forces/vendor-collide";
+import {
+  appendRadialGradient,
+  getFontColor,
+  nodeScale,
+} from "./helpers/color.helpers";
 import { createStandardToDataEntryMap } from "./helpers/data.helpers";
 import { calculateFontSizeForCircle } from "./helpers/font-size.helpers";
+import { randomXInWindow, randomYInWindow } from "./helpers/position.helpers";
 import { linkDataNodesToVendors } from "./helpers/vendor-links";
 import {
   DataNodeSelectionType,
@@ -34,7 +39,6 @@ import {
   G,
   IndexedDataNodeType,
   IndexedVendorNodeType,
-  isNodeVendorType,
   SimulationForce,
   VendorNodeSelectionType,
   VendorNodeType,
@@ -63,8 +67,10 @@ export class AppComponent {
   hoverRadiusPxAddition = 1;
   activeRadiusPxAddition = 3;
   circlePaddingFraction = 0.1;
-  vendorNodeTextPxWidth = 100;
-  vendorNodeCircleRadius = 400;
+  vendorNodeTextPxWidth = 50;
+  vendorNodeCircleRadius = 100;
+  interVendorDistance = this.vendorNodeCircleRadius * 2;
+  approvedStandardsGrowthFactor = 0.5;
 
   // Nodes
   dataNodes$ = from(
@@ -83,8 +89,8 @@ export class AppComponent {
         vendor,
         id: i,
         r: this.vendorNodeCircleRadius,
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
+        x: randomXInWindow(),
+        y: randomYInWindow(),
         __type: "NodeVendorType",
       }));
       return vendorNodes;
@@ -323,41 +329,24 @@ export class AppComponent {
   }
 
   initSimulation(nodes: (DataNodeType | VendorNodeType)[], ticked: () => void) {
+    const collisionForce = vendorCollide(
+      (d: DataNodeType | VendorNodeType) => {
+        if (d == this.selectionService.selectedNode) {
+          return d.r * 2;
+        } else {
+          return d.r;
+        }
+      },
+      this.vendorNodeTextPxWidth,
+      this.interVendorDistance
+    );
+    collisionForce.strength(0.2);
     this.sim = forceSimulation(nodes)
-      // .force(
-      //   SimulationForce.CENTER_X,
-      //   forceX(window.innerWidth / 2).strength((d) => {
-      //     return (
-      //       d == this.selectionService.selectedNode ? 0.5 : 0.1
-      //     ) as number;
-      //   })
-      // )
-      // .force(
-      //   SimulationForce.CENTER_Y,
-      //   forceY(window.innerHeight / 2).strength((d) => {
-      //     return (
-      //       d == this.selectionService.selectedNode ? 0.5 : 0.1
-      //     ) as number;
-      //   })
-      // )
-      .force(
-        SimulationForce.COLLISION,
-        vendorCollide((d: DataNodeType | VendorNodeType) => {
-          if (d == this.selectionService.selectedNode) {
-            return d.r * 2;
-          } else if (!isNodeVendorType(d)) {
-            // Is data node
-            return d.r;
-          } else {
-            // Is vendor node
-            return d.r;
-          }
-        }, this.vendorNodeTextPxWidth)
-      )
-      .force(SimulationForce.GRAVITY, forceManyBody().strength(1))
+      .force(SimulationForce.COLLISION, collisionForce)
+      // .force(SimulationForce.GRAVITY, forceManyBody().strength(-0.1))
       .force(
         SimulationForce.VENDOR,
-        forceLink(linkDataNodesToVendors(nodes)).strength(0.5)
+        forceLink(linkDataNodesToVendors(nodes)).strength(0.3)
       )
       .on("tick", ticked);
   }
@@ -378,10 +367,14 @@ export class AppComponent {
             > = {
               ...d,
               id: i,
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 2,
-              r: 15 + d.approvedStandards.length * 1,
-              base_r: 15 + d.approvedStandards.length * 1,
+              x: randomXInWindow(),
+              y: randomYInWindow(),
+              r:
+                30 +
+                d.approvedStandards.length * this.approvedStandardsGrowthFactor,
+              base_r:
+                30 +
+                d.approvedStandards.length * this.approvedStandardsGrowthFactor,
               selected: false,
             };
             const mainFontSize = calculateFontSizeForCircle(
@@ -403,7 +396,9 @@ export class AppComponent {
 
   initSvg() {
     const figure = select(`div.container`);
-    return figure.append("svg").attr("class", "svg-container");
+    const svg = figure.append("svg").attr("class", "svg-container");
+    appendRadialGradient(svg);
+    return svg;
   }
 
   initLineGroup(svg: G) {
@@ -420,13 +415,15 @@ export class AppComponent {
     const circle = g
       .append("circle")
       .attr("r", (d) => d.r)
-      .attr("fill", "white")
-      .attr("stroke", "black");
+      .attr("fill", (d) => nodeScale(d.approvedStandards.length / 30).hex());
 
     const mainText = g
       .append("text")
       .text((d) => d.productName)
       .attr("font-size", (d) => d.mainFontSize)
+      .attr("fill", (d) =>
+        getFontColor(nodeScale(d.approvedStandards.length / 30))
+      )
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "central")
       .attr("class", "dot-text");
@@ -461,7 +458,7 @@ export class AppComponent {
     const circle = g
       .append("circle")
       .attr("r", (d) => d.r)
-      .attr("fill", "grey");
+      .attr("fill", "url(#radial-gradient)");
 
     const mainText = g
       .append("text")

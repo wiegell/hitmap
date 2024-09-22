@@ -1,4 +1,5 @@
 import { quadtree } from "d3-quadtree";
+import { isNodeVendorType } from "../models/app.model";
 
 // @ts-expect-error
 function x(d) {
@@ -11,7 +12,7 @@ function y(d) {
 }
 
 // @ts-expect-error
-export function vendorCollide(radius, sameVendorRadius) {
+export function vendorCollide(radius, sameVendorRadius, interVendorRadius) {
   // @ts-expect-error
   var nodes,
     // @ts-expect-error
@@ -70,8 +71,22 @@ export function vendorCollide(radius, sameVendorRadius) {
             y = yi - data.y - data.vy,
             l = x * x + y * y;
 
+          let bothNodesAreVendors = false;
+          let oneOfNodesIsVendor = false;
           // @ts-expect-error
-          if (node.vendor === data.vendor) {
+          if (isNodeVendorType(node) && isNodeVendorType(data)) {
+            bothNodesAreVendors = true;
+          } else {
+            oneOfNodesIsVendor =
+              // @ts-expect-error
+              (isNodeVendorType(node) && !isNodeVendorType(data)) ||
+              // @ts-expect-error
+              (isNodeVendorType(data) && !isNodeVendorType(node));
+          }
+          if (bothNodesAreVendors) {
+            r = interVendorRadius + rj;
+            // @ts-expect-error
+          } else if (oneOfNodesIsVendor && node.vendor === data.vendor) {
             r = sameVendorRadius + rj;
           }
 
