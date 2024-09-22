@@ -4,5 +4,14 @@
 }
 
 .hovered {
-  background-color: rgba($color: aqua, $alpha: 0.5);
+  background-color: rgba($color: rgb(255, 115, 0), $alpha: 0.5);
+}
+
+.selected {
+  background-color: rgba($color: white, $alpha: 0.75);
+}
+
+.hovered,
+.selected {
+  padding: 5px;
 }
