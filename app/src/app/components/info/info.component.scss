@@ -1,4 +1,5 @@
 :host {
+  pointer-events: none;
   display: flex;
   align-items: flex-start;
 }
@@ -13,5 +14,6 @@
 
 .hovered,
 .selected {
+  pointer-events: auto;
   padding: 5px;
 }

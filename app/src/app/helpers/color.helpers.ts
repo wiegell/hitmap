@@ -24,16 +24,12 @@ export function appendRadialGradient(svg: SVG) {
     .attr("stop-color", "rgb(200, 200, 200)");
   radialGradient
     .append("stop")
-    .attr("offset", "65%")
-    .attr("stop-color", "rgb(140, 140, 140)");
+    .attr("offset", "0%")
+    .attr("stop-color", "rgb(160, 160, 160)");
   radialGradient
     .append("stop")
     .attr("offset", "100%")
-    .attr("stop-color", "rgb(126, 126, 126)");
-  radialGradient
-    .append("stop")
-    .attr("offset", "100%")
-    .attr("stop-color", "rgb(73, 73, 73)");
+    .attr("stop-color", "rgb(120, 120, 120)");
 }
 
 export function getFontColor(background: Color) {

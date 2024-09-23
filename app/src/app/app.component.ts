@@ -12,7 +12,7 @@ import {
   zoomIdentity,
   ZoomTransform,
 } from "d3";
-import { cloneDeep } from "lodash-es";
+import { cloneDeep, groupBy } from "lodash-es";
 import {
   combineLatest,
   from,
@@ -69,7 +69,7 @@ export class AppComponent {
   circlePaddingFraction = 0.1;
   vendorNodeTextPxWidth = 50;
   vendorNodeCircleRadius = 100;
-  interVendorDistance = this.vendorNodeCircleRadius * 2;
+  interVendorDistance = this.vendorNodeCircleRadius * 1.0;
   approvedStandardsGrowthFactor = 0.5;
 
   // Nodes
@@ -82,13 +82,13 @@ export class AppComponent {
   ).pipe(shareReplay(1));
   vendorNodes$ = this.dataNodes$.pipe(
     map((dataNodes) => {
-      const vendors = Array.from(
-        new Set(dataNodes.map((node) => node.vendor ?? "")).values()
-      );
-      const vendorNodes: VendorNodeType[] = vendors.map((vendor, i) => ({
+      const dataNodesByVendor = groupBy(dataNodes, (node) => node.vendor);
+      const vendorNodes: VendorNodeType[] = Object.entries(
+        dataNodesByVendor
+      ).map(([vendor, dataNodesFromCurrentVendor], i) => ({
         vendor,
         id: i,
-        r: this.vendorNodeCircleRadius,
+        r: this.vendorNodeCircleRadius + dataNodesFromCurrentVendor.length * 10,
         x: randomXInWindow(),
         y: randomYInWindow(),
         __type: "NodeVendorType",
@@ -298,29 +298,47 @@ export class AppComponent {
 
     // Mouse handlers
     combineLatest([
+      this.svg$,
       this.dataNodesReIndexed$,
       this.vendorNodes$,
       this.dataNodeSelection$,
-    ]).subscribe(([dataNodes, vendorNodes, nodeSelection]) => {
+    ]).subscribe(([svg, dataNodes, vendorNodes, nodeSelection]) => {
+      // Nodes
       nodeSelection
         .on("mouseover", (event, d) => {
+          event.stopPropagation();
           this.infoService.setHoveredNode(d);
         })
         .on("mouseout", (event, d) => {
+          event.stopPropagation();
           this.infoService.setHoveredNode(this.infoService.selectedNode);
+        })
+        .on("click", (event) => {
+          // Handled instead by mousedown and mouseup, but `stopPropagation` is needed
+          // to prevent the backdrop click handler from triggering
+          event.stopPropagation();
         })
         .on("mousedown", (event, d) => {
           // stopPropagation is needed for the zoom handler not to
           // consume the mouseup event for some reason
+          // Also used to stop event propagation to the backdrop
           event.stopPropagation();
           this.infoService.setActiveNode(d);
         })
         .on("mouseup", (event, d) => {
+          event.stopPropagation();
           this.infoService.setActiveNode(undefined);
           this.infoService.setSelectedNode(d);
           this.initializeForces([...dataNodes, ...vendorNodes]);
           this.sim!.alpha(0.5).restart();
         });
+
+      // Backdrop
+      svg.on("click", (event) => {
+        event.stopPropagation();
+        console.log("handler");
+        this.infoService.setSelectedNode(undefined);
+      });
     });
   }
 
@@ -346,8 +364,9 @@ export class AppComponent {
       // .force(SimulationForce.GRAVITY, forceManyBody().strength(-0.1))
       .force(
         SimulationForce.VENDOR,
-        forceLink(linkDataNodesToVendors(nodes)).strength(0.3)
+        forceLink(linkDataNodesToVendors(nodes)).strength(0.5)
       )
+      .alphaDecay(0.01)
       .on("tick", ticked);
   }
 
@@ -488,7 +507,7 @@ export class AppComponent {
   initializeForces(nodes: (DataNodeType | VendorNodeType)[]) {
     console.log("nodes", nodes);
     this.sim!.force(SimulationForce.VENDOR)!.initialize!(nodes, Math.random);
-    this.sim!.force(SimulationForce.GRAVITY)!.initialize!(nodes, Math.random);
+    // this.sim!.force(SimulationForce.GRAVITY)!.initialize!(nodes, Math.random);
     this.sim!.force(SimulationForce.COLLISION)!.initialize!(nodes, Math.random);
   }
 }

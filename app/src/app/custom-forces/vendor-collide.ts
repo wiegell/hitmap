@@ -84,7 +84,9 @@ export function vendorCollide(radius, sameVendorRadius, interVendorRadius) {
               (isNodeVendorType(data) && !isNodeVendorType(node));
           }
           if (bothNodesAreVendors) {
-            r = interVendorRadius + rj;
+            // Check wether the current node radius is actually larger
+            // than the new calculated one, and if so use that one
+            r = interVendorRadius + rj > r ? interVendorRadius + rj : r;
             // @ts-expect-error
           } else if (oneOfNodesIsVendor && node.vendor === data.vendor) {
             r = sameVendorRadius + rj;
