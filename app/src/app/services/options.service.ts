@@ -1,5 +1,7 @@
 import { Injectable } from "@angular/core";
-import { Router, ActivatedRoute } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
+import { ZoomTransform } from "d3";
+import { BehaviorSubject, debounceTime, Observable } from "rxjs";
 import {
   GeneralOptions,
   optionsQueryParamName,
@@ -8,24 +10,13 @@ import {
   ZoomOptionsI,
   zoomQueryParamName,
 } from "./options.model";
-import {
-  BehaviorSubject,
-  debounce,
-  debounceTime,
-  map,
-  Observable,
-  skip,
-  tap,
-} from "rxjs";
-import { cloneDeep } from "lodash-es";
-import { ZoomTransform } from "d3";
 
 @Injectable({
   providedIn: "root",
 })
 export class OptionsService {
-  // private optionsSubject: BehaviorSubject<Options>;
-  // public options$: Observable<OptionsI>;
+  private generalOptionsSubject: BehaviorSubject<GeneralOptions>;
+  public generalOptions$: Observable<GeneralOptions>;
 
   private zoomSubject: BehaviorSubject<ZoomOptionsI>;
   public zoom$: Observable<ZoomOptionsI>;
@@ -33,11 +24,18 @@ export class OptionsService {
   constructor(private router: Router, private route: ActivatedRoute) {
     // Load options from url if present
     const zoomParam = this.getZoomParam();
+    const generalOptionsParam = this.getOptionsParam();
     let zoomOptions: ZoomOptions;
+    let generalOptions: GeneralOptions;
     if (zoomParam != null && zoomParam != "") {
       zoomOptions = ZoomOptions.fromBase64UrlEncoded(zoomParam);
     } else {
       zoomOptions = new ZoomOptions(1, 0, 0);
+    }
+    if (generalOptionsParam != null && generalOptionsParam != "") {
+      generalOptions = GeneralOptions.fromBase64UrlEncoded(generalOptionsParam);
+    } else {
+      generalOptions = new GeneralOptions();
     }
 
     // Init zoom subject
@@ -45,8 +43,8 @@ export class OptionsService {
     this.zoom$ = this.zoomSubject.asObservable();
 
     // Init options observable
-    // this.options$ = this.optionsSubject.pipe(
-    // );
+    this.generalOptionsSubject = new BehaviorSubject(generalOptions);
+    this.generalOptions$ = this.generalOptionsSubject.asObservable();
 
     // Update url on options changes
     this.zoom$.pipe(debounceTime(200)).subscribe((options) => {
@@ -56,10 +54,16 @@ export class OptionsService {
         this.setZoomParam(zoomOptions);
       }
     });
+    this.generalOptions$.pipe(debounceTime(500)).subscribe((generalOptions) => {
+      if (generalOptions instanceof GeneralOptions)
+        this.setOptionsParam(generalOptions);
+      else {
+        throw new Error("invalid general options", generalOptions);
+      }
+    });
   }
 
   // Url handling
-
   private getOptionsParam(): string | null {
     // URLSearchParams is used over angular routing
     // because it works in constructor before angular router initialization

@@ -1,0 +1,50 @@
+@import "_variables";
+$search-border-width: 1px;
+$search-image-width: $banner-height - ($search-border-width * 2);
+$search-expanded-width: 200px;
+$search-input-expanded-margin: 5px;
+$search-input-expanded-width: $search-expanded-width - $search-image-width -
+  $search-input-expanded-margin;
+
+:host {
+  background-color: $banner-color;
+  flex-grow: 1;
+  display: flex;
+
+  .input-container {
+    background-color: $banner-color;
+    flex-grow: 1;
+    display: flex;
+    border: 1px solid rgba(white, 0);
+    &:focus-within {
+      border-color: white;
+    }
+
+    &:not(:focus-within) {
+      &:hover {
+        cursor: pointer;
+        background-color: $banner-hover-color;
+      }
+    }
+
+    img {
+      flex-basis: content;
+      width: $search-image-width;
+    }
+
+    input {
+      font-family: "Menlo assets", "SUSE", sans-serif;
+      background-color: transparent;
+      border: none;
+      border-radius: 0;
+      width: 0;
+      padding: 0;
+      &:focus,
+      &.non-empty {
+        margin-left: $search-input-expanded-margin;
+        width: $search-input-expanded-width;
+        outline: none;
+      }
+    }
+  }
+}

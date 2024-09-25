@@ -2,8 +2,21 @@
   height: 100vh;
   width: 100vw;
 }
-app-info {
+.overlay {
+  display: flex;
   position: fixed;
+  z-index: 1;
   top: 0;
+  left: 0;
   right: 0;
+  bottom: 0;
+  pointer-events: none;
+  justify-content: space-between;
+
+  app-info {
+    flex-grow: 0;
+  }
+  app-banner {
+    // flex-basis: 30vw;
+  }
 }

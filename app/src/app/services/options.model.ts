@@ -1,8 +1,10 @@
-import { map, ZoomTransform } from "d3";
-import { cloneDeep } from "lodash-es";
+import { ZoomTransform } from "d3";
+import { cloneDeep, isEqual } from "lodash-es";
+import { Filter } from "./search.model";
 
 enum option {
   groupBy,
+  filters,
   hoveredStandard,
   selectedStandard,
 }
@@ -18,7 +20,7 @@ enum groupByOptionValue {
   none,
 }
 
-type optionValue = groupByOptionValue | ZoomTransformOptionValue;
+type optionValue = groupByOptionValue | ZoomTransformOptionValue | Filter[];
 
 export const optionsQueryParamName = "options";
 export const zoomQueryParamName = "zoom";
@@ -37,19 +39,35 @@ export class GeneralOptions {
   }
 
   // Value accessors
-  // public set language(language: ZoomTransformOptionValue) {
-  //   this.optionsMap.set(option.zoomTransform, zoomTransform);
-  // }
-  // public get language() {
-  //   const zoomTransformOption = this.optionsMap.get(option.zoomTransform);
-  //   if (zoomTransformOption == null) {
-  //     return { k: 1, x: 0, y: 0 };
-  //   }
-  //   return zoomTransformOption as ZoomTransformOptionValue;
-  // }
-  // public toObject(): OptionsI {
-  //   return this;
-  // }
+  public addFilter(filter: Filter) {
+    const filters = this.optionsMap.get(option.filters);
+    if (filters != null) {
+      if (!Array.isArray(filters)) {
+        throw new Error("filters are not array");
+      }
+      filters.push(filter);
+    }
+  }
+  public get filters() {
+    return this.optionsMap.get(option.filters);
+  }
+  public removeFilter(filterToRemove: Filter) {
+    const filters = this.optionsMap.get(option.filters);
+    if (filters != null) {
+      if (!Array.isArray(filters)) {
+        throw new Error("filters are not array");
+      }
+      const filteredFilters = filters.filter(
+        (filter) => !isEqual(filter, filterToRemove)
+      );
+      // ^^ I'm not even mad - that's amazing!
+      this.optionsMap.set(option.filters, filteredFilters);
+    }
+  }
+
+  constructor() {
+    this.optionsMap.set(option.filters, []);
+  }
 
   /**
    *

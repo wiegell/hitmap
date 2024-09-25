@@ -1,0 +1,23 @@
+@import "_variables";
+$banner-padding: 5px;
+$banner-line-height: calc(($banner-height / 2) - $banner-padding);
+
+:host {
+  pointer-events: auto;
+  align-self: start;
+  display: block;
+  line-height: $banner-line-height;
+}
+
+.container {
+  display: flex;
+  .title {
+    font-size: 16px;
+    font-weight: 800;
+    width: $banner-height;
+    padding: 5px;
+    background-color: $banner-color;
+    flex-grow: 0;
+    text-align: center;
+  }
+}

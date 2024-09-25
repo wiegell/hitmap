@@ -1,0 +1,11 @@
+<div (click)="focus()" class="input-container">
+  <img src="/assets/icons/binoculars.svg" alt="" />
+  <input
+    (keydown.enter)="enter()"
+    (blur)="blur()"
+    #searchInput
+    type="text"
+    [(ngModel)]="searchStr"
+    [ngClass]="{ 'non-empty': expanded }"
+  />
+</div>

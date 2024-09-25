@@ -22,6 +22,7 @@ import {
   take,
   withLatestFrom,
 } from "rxjs";
+import { BannerComponent } from "./components/banner/banner.component";
 import { InfoComponent } from "./components/info/info.component";
 import { vendorCollide } from "./custom-forces/vendor-collide";
 import {
@@ -33,6 +34,7 @@ import { createStandardToDataEntryMap } from "./helpers/data.helpers";
 import { calculateFontSizeForCircle } from "./helpers/font-size.helpers";
 import { randomXInWindow, randomYInWindow } from "./helpers/position.helpers";
 import { linkDataNodesToVendors } from "./helpers/vendor-links";
+import { updateNestedG } from "./helpers/zoom.helpers";
 import {
   DataNodeSelectionType,
   DataNodeType,
@@ -40,6 +42,7 @@ import {
   IndexedDataNodeType,
   IndexedVendorNodeType,
   SimulationForce,
+  SVG,
   VendorNodeSelectionType,
   VendorNodeType,
 } from "./models/app.model";
@@ -47,12 +50,13 @@ import { DataEntry } from "./models/data.model";
 import { Edge } from "./models/edge.model";
 import { AbbreviationPipe } from "./pipes/abbreviation.pipe";
 import { OptionsService } from "./services/options.service";
+import { SearchService } from "./services/search.service";
 import { SelectionService } from "./services/selection.service";
 
 @Component({
   selector: "app-root",
   standalone: true,
-  imports: [RouterOutlet, InfoComponent],
+  imports: [RouterOutlet, InfoComponent, BannerComponent],
   templateUrl: "./app.component.html",
   styleUrl: "./app.component.scss",
 })
@@ -128,7 +132,11 @@ export class AppComponent {
   // D3 Selections
   svg$ = this.domCreated$.pipe(map(this.initSvg), shareReplay(1));
   containerGraph$ = this.svg$.pipe(
-    map((svg) => svg.append("g")),
+    map(this.initContainerGraph),
+    shareReplay(1)
+  );
+  searchBackDrop$ = this.containerGraph$.pipe(
+    map(this.initSearchBackDrop),
     shareReplay(1)
   );
   lineGroup$ = this.containerGraph$.pipe(
@@ -157,6 +165,7 @@ export class AppComponent {
   public constructor(
     public infoService: SelectionService,
     public selectionService: SelectionService,
+    public searchService: SearchService,
     public optionsService: OptionsService
   ) {
     // Kickoff simulation
@@ -196,8 +205,7 @@ export class AppComponent {
       this.svg$,
       // This is the initial value read from url
       this.optionsService.zoom$.pipe(take(1)),
-      this.containerGraph$,
-    ]).subscribe(([svg, zoomOptions, g]) => {
+    ]).subscribe(([svg, zoomOptions]) => {
       // TODO: This handler is probably being set more than once
       // on multiple emits
       const z = zoom().on("zoom", (e: D3ZoomEvent<Element, unknown>) => {
@@ -213,20 +221,25 @@ export class AppComponent {
         );
     });
     // Perform zoom action
-    combineLatest([this.optionsService.zoom$, this.containerGraph$]).subscribe(
-      ([zoomTransform, g]) => {
-        if (zoomTransform instanceof ZoomTransform) {
-          g.attr("transform", zoomTransform.toString());
-        } else {
-          const instantiated = new ZoomTransform(
-            zoomTransform.k,
-            zoomTransform.x,
-            zoomTransform.y
-          );
-          g.attr("transform", instantiated.toString());
-        }
+    combineLatest([
+      this.optionsService.zoom$,
+      this.containerGraph$,
+      this.searchBackDrop$,
+    ]).subscribe(([zoomTransform, g, backdrop]) => {
+      let instantiated: ZoomTransform;
+      if (zoomTransform instanceof ZoomTransform) {
+        instantiated = zoomTransform;
+      } else {
+        instantiated = new ZoomTransform(
+          zoomTransform.k,
+          zoomTransform.x,
+          zoomTransform.y
+        );
       }
-    );
+      g.attr("transform", instantiated.toString());
+
+      updateNestedG(instantiated, backdrop);
+    });
 
     // Effects, hover edges
     combineLatest([
@@ -246,34 +259,76 @@ export class AppComponent {
       });
     });
 
-    // Effects, hover nodes
+    // Effects, hover or search nodes
     combineLatest([
+      this.searchBackDrop$,
       this.dataNodeSelection$,
       this.selectionService.selectedNode$,
       this.selectionService.hoveredNode$,
-    ]).subscribe(([nodeSelection, selectedNode, hoveredNode]) => {
-      // Node, hover
-      nodeSelection
-        .filter(
-          (d: IndexedDataNodeType) => hoveredNode === d && selectedNode !== d
-        )
-        .select("circle")
-        .transition()
-        .duration(200)
-        .ease(easeCubicOut)
-        .attr("stroke-width", 2)
-        .attr("r", (d) => d.r + this.hoverRadiusPxAddition);
-      nodeSelection
-        .filter(
-          (d: IndexedDataNodeType) => hoveredNode !== d && selectedNode !== d
-        )
-        .select("circle")
-        .transition()
-        .duration(200)
-        .ease(easeCubicOut)
-        .attr("stroke-width", 1)
-        .attr("r", (d) => d.base_r);
-    });
+      this.searchService.searchString$,
+    ]).subscribe(
+      ([backDrop, nodeSelection, selectedNode, hoveredNode, searchString]) => {
+        // Backdrop
+        if (searchString == "") {
+          backDrop.lower();
+          backDrop
+            .select("rect")
+            .transition()
+            .duration(500)
+            .attr("fill", "transparent");
+        } else {
+          backDrop.raise();
+          backDrop
+            .select("rect")
+            .transition()
+            .duration(500)
+            .attr("fill", "rgba(0,0,0,0.5)");
+        }
+
+        // Node, hover
+        nodeSelection
+          .filter((d: IndexedDataNodeType) => {
+            if (hoveredNode === d && selectedNode !== d) return true;
+            else if (searchString == "") return false;
+            else if (
+              JSON.stringify(d, null, 0)
+                .toLowerCase()
+                .includes(searchString.toLowerCase()) &&
+              selectedNode !== d
+            )
+              return true;
+            else return false;
+          })
+          .raise()
+          .select("circle")
+          .transition()
+          .duration(200)
+          .ease(easeCubicOut)
+          .attr("stroke-width", 2)
+          .attr("stroke", "orange")
+          .attr("r", (d) => d.r + this.hoverRadiusPxAddition);
+        nodeSelection
+          .filter((d: IndexedDataNodeType) => {
+            if (d === selectedNode) return false;
+            else if (hoveredNode !== d) {
+              if (searchString === "") return true;
+              else if (
+                !JSON.stringify(d, null, 0)
+                  .toLowerCase()
+                  .includes(searchString.toLowerCase())
+              )
+                return true;
+              else return false;
+            } else return false;
+          })
+          .select("circle")
+          .transition()
+          .duration(200)
+          .ease(easeCubicOut)
+          .attr("stroke-width", 0)
+          .attr("r", (d) => d.base_r);
+      }
+    );
 
     // Effects, nodes active
     combineLatest([
@@ -287,6 +342,26 @@ export class AppComponent {
           (d: IndexedDataNodeType) => activeNode === d && selectedNode !== d
         )
         .select("circle")
+        .attr("r", (d) => d.r + this.activeRadiusPxAddition);
+      nodeSelection
+        .filter(
+          (d: IndexedDataNodeType) => activeNode !== d && selectedNode !== d
+        )
+        .select("circle")
+        .attr("r", (d) => d.base_r);
+    });
+
+    // Effects, nodes selected
+    combineLatest([
+      this.dataNodeSelection$,
+      this.selectionService.selectedNode$,
+      this.selectionService.activeNode$,
+    ]).subscribe(([nodeSelection, selectedNode, activeNode]) => {
+      // Node, active
+      nodeSelection
+        .filter((d: IndexedDataNodeType) => selectedNode === d)
+        .select("circle")
+        .attr("stroke", "white")
         .attr("r", (d) => d.r + this.activeRadiusPxAddition);
       nodeSelection
         .filter(
@@ -329,16 +404,21 @@ export class AppComponent {
           event.stopPropagation();
           this.infoService.setActiveNode(undefined);
           this.infoService.setSelectedNode(d);
-          this.initializeForces([...dataNodes, ...vendorNodes]);
-          this.sim!.alpha(0.5).restart();
+          // this.initializeForces([...dataNodes, ...vendorNodes]);
+          // this.sim!.alpha(0.5).restart();
         });
 
       // Backdrop
-      svg.on("click", (event) => {
-        event.stopPropagation();
-        console.log("handler");
-        this.infoService.setSelectedNode(undefined);
-      });
+      svg
+        .on("click", (event) => {
+          event.stopPropagation();
+          console.log("handler");
+          this.infoService.setSelectedNode(undefined);
+        })
+        .on("mouseover", (event) => {
+          event.stopPropagation();
+          this.infoService.setHoveredNode(undefined);
+        });
     });
   }
 
@@ -418,6 +498,21 @@ export class AppComponent {
     const svg = figure.append("svg").attr("class", "svg-container");
     appendRadialGradient(svg);
     return svg;
+  }
+
+  initContainerGraph(svg: SVG) {
+    const g = svg.append("g");
+    return g;
+  }
+
+  initSearchBackDrop(g: G) {
+    const searchBackdrop = g.append("g").attr("class", "backdrop");
+    searchBackdrop
+      .append("rect")
+      .attr("class", "backdrop-rect")
+      .attr("width", "100vw")
+      .attr("height", "100%");
+    return searchBackdrop;
   }
 
   initLineGroup(svg: G) {
