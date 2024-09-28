@@ -1,6 +1,7 @@
 import { Injectable } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
 import { ZoomTransform } from "d3";
+import { cloneDeep } from "lodash-es";
 import { BehaviorSubject, debounceTime, Observable } from "rxjs";
 import {
   GeneralOptions,
@@ -10,6 +11,7 @@ import {
   ZoomOptionsI,
   zoomQueryParamName,
 } from "./options.model";
+import { Filter } from "./search.model";
 
 @Injectable({
   providedIn: "root",
@@ -102,5 +104,16 @@ export class OptionsService {
 
   public zoomTransform(zoomTransform: ZoomTransform) {
     this.zoomSubject.next(zoomTransform);
+  }
+
+  public addFilter(filter: Filter) {
+    const clonedOptions = cloneDeep(this.generalOptionsSubject.value);
+    clonedOptions.addFilter(filter);
+    this.generalOptionsSubject.next(clonedOptions);
+  }
+  public removeFilter(filter: Filter) {
+    const clonedOptions = cloneDeep(this.generalOptionsSubject.value);
+    clonedOptions.removeFilter(filter);
+    this.generalOptionsSubject.next(clonedOptions);
   }
 }

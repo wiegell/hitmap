@@ -1,3 +1,9 @@
 $banner-height: 42px;
 $banner-color: #bcbcbc;
 $banner-hover-color: darken(#bcbcbc, 10%);
+$filter-color: #6a0091;
+$filter-hover-color: darken(#6a0091, 5%);
+$filter-active-color: darken(#6a0091, 10%);
+$filter-remove-color: $filter-active-color;
+$filter-remove-hover-color: darken($filter-remove-color, 5%);
+$filter-remove-active-color: darken($filter-remove-color, 10%);

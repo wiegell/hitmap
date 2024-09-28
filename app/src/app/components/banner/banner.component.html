@@ -6,5 +6,8 @@
   <app-search
     [text]="(searchStringFromService$ | async) ?? ''"
     (textChange)="searchTextUpdated($event)"
+    (confirmSearch)="confirmSearch()"
   ></app-search>
+  @for( filter of filtersApplied$ | async; track filter ){
+  <app-filter [filter]="filter" (remove)="removeFilter(filter)"></app-filter> }
 </div>

@@ -1,0 +1,15 @@
+<a
+  tabindex="0"
+  class="click-container"
+  (click)="remove()"
+  (keyup.enter)="remove()"
+  (mouseover)="setCloseIcon($event)"
+  (mouseout)="setFunnelIcon($event)"
+>
+  <div class="icon-container">
+    <img [src]="iconPath" alt="" />
+  </div>
+  <div class="text">
+    <p>{{ filter?.str }}</p>
+  </div>
+</a>

@@ -1,0 +1,80 @@
+@import "_variables";
+
+$padding: 5px;
+
+:host {
+  background-color: $filter-color;
+  flex-grow: 1;
+  display: flex;
+
+  .click-container {
+    display: flex;
+    flex-grow: 1;
+    align-items: stretch;
+    color: white;
+    overflow: hidden;
+
+    &:hover {
+      .icon-container {
+        background-color: $filter-remove-hover-color;
+        &::after {
+          background-color: $filter-remove-hover-color;
+        }
+      }
+      .text {
+        background-color: $filter-hover-color;
+      }
+    }
+
+    &:active {
+      .icon-container {
+        background-color: $filter-remove-active-color;
+        &::after {
+          background-color: $filter-remove-active-color;
+        }
+      }
+      .text {
+        background-color: $filter-active-color;
+      }
+    }
+  }
+
+  .icon-container {
+    position: relative;
+    background-color: $filter-remove-color;
+    display: flex;
+    align-items: center;
+    padding-left: $padding;
+    margin-right: calc($padding * 2);
+
+    img {
+      z-index: 2;
+      width: calc($banner-height / 2);
+      height: calc($banner-height / 2);
+    }
+
+    &::after {
+      z-index: 1;
+      position: absolute;
+      content: "";
+      display: block;
+      width: calc($padding * 2);
+      left: calc($banner-height / 2 + $padding);
+      top: -$padding;
+      bottom: -$padding;
+      background-color: $filter-remove-color;
+      transform: rotate(15deg) translateX(-$padding);
+    }
+  }
+
+  .text {
+    display: flex;
+    align-items: center;
+    padding-right: $padding;
+  }
+
+  &:hover {
+    cursor: pointer;
+    background-color: $filter-hover-color;
+  }
+}

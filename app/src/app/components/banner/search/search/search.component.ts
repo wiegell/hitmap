@@ -50,6 +50,6 @@ export class SearchComponent {
   }
 
   public enter() {
-    console.log("wop");
+    this.confirmSearch.emit(true);
   }
 }

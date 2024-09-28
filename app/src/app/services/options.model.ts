@@ -49,7 +49,7 @@ export class GeneralOptions {
     }
   }
   public get filters() {
-    return this.optionsMap.get(option.filters);
+    return this.optionsMap.get(option.filters) as Filter[];
   }
   public removeFilter(filterToRemove: Filter) {
     const filters = this.optionsMap.get(option.filters);
