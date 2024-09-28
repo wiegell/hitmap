@@ -8,4 +8,9 @@
     [(ngModel)]="searchStr"
     [ngClass]="{ 'non-empty': expanded }"
   />
+  @if(searchStr==""){
+  <div class="pseudo-placeholder">
+    <span class="enter">⏎</span><span class="filter"> for at filtrere</span>
+  </div>
+  }
 </div>

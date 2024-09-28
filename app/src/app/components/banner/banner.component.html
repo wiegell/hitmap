@@ -3,5 +3,8 @@
     <p>HIT</p>
     <p>MAP</p>
   </div>
-  <app-search (textChange)="searchTextUpdated($event)"></app-search>
+  <app-search
+    [text]="(searchStringFromService$ | async) ?? ''"
+    (textChange)="searchTextUpdated($event)"
+  ></app-search>
 </div>

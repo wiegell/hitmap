@@ -20,7 +20,13 @@
   </p>
   @for (supportedStandard of selectedNode.approvedStandards; track
   supportedStandard){
-  <p>{{ supportedStandard.name }} ({{ supportedStandard.version }})</p>
+  <p>
+    <span
+      class="blob"
+      [style.background]="supportedStandard | colorMap : (colorMap$ | async)"
+    ></span>
+    {{ supportedStandard.name }} ({{ supportedStandard.version }})
+  </p>
   }
 </div>
 

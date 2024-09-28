@@ -1,0 +1,21 @@
+@import "variables";
+.text {
+  font-size: 13px;
+  height: calc($banner-height/2);
+  background-color: $banner-color;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gradient {
+  padding: 0 3px;
+  width: 210px;
+  height: calc($banner-height/2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  p:last-of-type {
+    color: white;
+  }
+}

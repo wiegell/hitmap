@@ -161,9 +161,8 @@ text {
 .line-group {
   stroke-width: 1px;
   stroke: #aaa;
-  .bold {
-    stroke-width: 3px;
-    stroke: #faa;
+  .hovered {
+    stroke: orange;
   }
 }
 

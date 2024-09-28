@@ -1,9 +1,9 @@
 import { zoomIdentity, ZoomTransform } from "d3";
-import { G } from "../models/app.model";
+import { Rect } from "../models/app.model";
 
-export function updateNestedG(
+export function inverseTranslateNestedRect(
   parentTransform: ZoomTransform,
-  nestedGElement: G
+  nestedRectSelection: Rect
 ) {
   // Get the current zoom transform of the parent g element
   const parentScale = parentTransform.k;
@@ -21,5 +21,5 @@ export function updateNestedG(
     .scale(inverseScale);
 
   // Apply the new transform to the nested g element
-  nestedGElement.select("rect").attr("transform", nestedTransform.toString());
+  nestedRectSelection.attr("transform", nestedTransform.toString());
 }

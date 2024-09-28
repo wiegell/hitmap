@@ -1,7 +1,7 @@
 @import "_variables";
 $search-border-width: 1px;
 $search-image-width: $banner-height - ($search-border-width * 2);
-$search-expanded-width: 200px;
+$search-expanded-width: 250px;
 $search-input-expanded-margin: 5px;
 $search-input-expanded-width: $search-expanded-width - $search-image-width -
   $search-input-expanded-margin;
@@ -13,6 +13,7 @@ $search-input-expanded-width: $search-expanded-width - $search-image-width -
 
   .input-container {
     background-color: $banner-color;
+    position: relative;
     flex-grow: 1;
     display: flex;
     border: 1px solid rgba(white, 0);
@@ -24,6 +25,10 @@ $search-input-expanded-width: $search-expanded-width - $search-image-width -
       &:hover {
         cursor: pointer;
         background-color: $banner-hover-color;
+      }
+
+      .pseudo-placeholder {
+        display: none;
       }
     }
 
@@ -44,6 +49,21 @@ $search-input-expanded-width: $search-expanded-width - $search-image-width -
         margin-left: $search-input-expanded-margin;
         width: $search-input-expanded-width;
         outline: none;
+      }
+    }
+    .pseudo-placeholder {
+      position: absolute;
+      pointer-events: none;
+      display: block;
+      left: calc($search-image-width + $search-input-expanded-margin + 20px);
+      top: 50%;
+      transform: translateY(-50%);
+      color: #676767;
+
+      .enter {
+        font-size: 24px;
+        font-weight: bold;
+        vertical-align: bottom;
       }
     }
   }

@@ -18,7 +18,10 @@ import { FormsModule } from "@angular/forms";
 })
 export class SearchComponent {
   @Output() textChange = new EventEmitter<string>();
-  @Input() text = "";
+  @Input() set text(str: string) {
+    this._searchStr = str;
+    if (this._searchStr == "") this.expanded = false;
+  }
   @Output() confirmSearch = new EventEmitter<boolean>();
 
   @ViewChild("searchInput") searchInput?: ElementRef;

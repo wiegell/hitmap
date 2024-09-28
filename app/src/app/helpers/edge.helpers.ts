@@ -1,12 +1,13 @@
-import { flatMap, map } from "lodash-es";
+import { flatMap } from "lodash-es";
 
+import { DataEntry } from "../models/data.model";
 import { Edge } from "../models/edge.model";
 import { StandardMap } from "./data.helpers";
-import { DataEntry } from "../models/data.model";
 
 export function generateEdges(
   allEntries: DataEntry[],
-  standardMap: StandardMap
+  standardMap: StandardMap,
+  onlyForNode?: DataEntry | null
 ): Edge<DataEntry>[] {
   const map = flatMap(
     flatMap(
@@ -23,5 +24,10 @@ export function generateEdges(
       })
     )
   );
+  if (onlyForNode !== null) {
+    return map.filter(
+      (edge) => edge.source == onlyForNode || edge.target == onlyForNode
+    );
+  }
   return map;
 }

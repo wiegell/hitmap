@@ -2,12 +2,14 @@
 
 /dist/
 /scrape/dist/
+/palette-generator/dist/
 /bazel-out
 /integration/bazel/bazel-*
 *.log
 /node_modules/
 /app/node_modules/
 /scrape/node_modules/
+/palette-generator/node_modules/
 /app/public/assets/data.json
 
 # CircleCI temporary file for cache key computation.

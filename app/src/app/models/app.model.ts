@@ -39,6 +39,7 @@ export type VendorNodeSelectionType = Selection<
 >;
 export type SVG = Selection<SVGSVGElement, unknown, HTMLElement, any>;
 export type G = Selection<SVGGElement, unknown, HTMLElement, any>;
+export type Rect = Selection<BaseType, unknown, HTMLElement, any>;
 
 export enum SimulationForce {
   GRAVITY = "GRAVITY",

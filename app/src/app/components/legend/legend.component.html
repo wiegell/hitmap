@@ -1,0 +1,14 @@
+<div class="container">
+  <div class="text">
+    n
+    {{
+      i18nService.getText("supportedStandards")
+        | i18n : (i18nService.chosenLanguage$ | async)
+        | lowercase
+    }}
+  </div>
+  <div class="gradient" [style.background]="linearGradient">
+    <p>0</p>
+    <p>30+</p>
+  </div>
+</div>
