@@ -19,15 +19,11 @@ export class FilterComponent {
   }
 
   setCloseIcon(ev: Event) {
-    console.log("ev", ev);
-    console.log("hit");
     ev.stopPropagation();
     this.iconPath = "/assets/icons/x.svg";
   }
 
   setFunnelIcon(ev: Event) {
-    console.log("hit2");
-    console.log("ev", ev);
     this.iconPath = "/assets/icons/funnel.svg";
   }
 }

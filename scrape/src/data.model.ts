@@ -1,5 +1,6 @@
 export class DataRecord {
   constructor(
+    public uuid: string,
     public productName?: string,
     public vendor?: string,
     public systemType?: string,

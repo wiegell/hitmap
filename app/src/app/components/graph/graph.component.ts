@@ -12,15 +12,19 @@ import {
   zoomIdentity,
   ZoomTransform,
 } from "d3";
-import { cloneDeep, groupBy } from "lodash-es";
+import { groupBy, isEqual } from "lodash-es";
 import {
   combineLatest,
+  distinctUntilChanged,
   from,
   map,
+  Observable,
   shareReplay,
+  skip,
   Subject,
   take,
-  tap,
+  withLatestFrom,
+  zip,
 } from "rxjs";
 import { vendorCollide } from "../../custom-forces/vendor-collide";
 import {
@@ -35,23 +39,29 @@ import {
   randomXInWindow,
   randomYInWindow,
 } from "../../helpers/position.helpers";
+import { wildCardCompare } from "../../helpers/search.helpers";
 import { linkDataNodesToVendors } from "../../helpers/vendor-links";
 import { inverseTranslateNestedRect } from "../../helpers/zoom.helpers";
 import {
+  Circle,
   DataNodeSelectionType,
   DataNodeType,
+  EdgeSelectionType,
   G,
   IndexedDataNodeType,
   IndexedVendorNodeType,
   SimulationForce,
   SVG,
+  Text,
   VendorNodeSelectionType,
   VendorNodeType,
 } from "../../models/app.model";
 import { DataEntry } from "../../models/data.model";
 import { Edge } from "../../models/edge.model";
+import { ColorMap } from "../../services/color.model";
 import { ColorService } from "../../services/color.service";
 import { OptionsService } from "../../services/options.service";
+import { Filter } from "../../services/search.model";
 import { SearchService } from "../../services/search.service";
 import { SelectionService } from "../../services/selection.service";
 
@@ -85,7 +95,22 @@ export class GraphComponent {
       this.circlePaddingFraction
     )
   ).pipe(shareReplay(1));
-  vendorNodes$ = this.dataNodes$.pipe(
+  dataNodesFiltered$ = combineLatest([
+    this.dataNodes$,
+    this.optionsService.generalOptions$.pipe(
+      map((options) => options.filters),
+      distinctUntilChanged(isEqual),
+      shareReplay(1)
+    ) as Observable<Filter[]>,
+  ]).pipe(
+    map(([dataNodes, filters]) =>
+      dataNodes.filter((dataNode) =>
+        filters.every((filter) => wildCardCompare(dataNode, filter.str))
+      )
+    )
+  );
+
+  vendorNodes$ = this.dataNodesFiltered$.pipe(
     map((dataNodes) => {
       const dataNodesByVendor = groupBy(dataNodes, (node) => node.vendor);
       const vendorNodes: VendorNodeType[] = Object.entries(
@@ -102,32 +127,16 @@ export class GraphComponent {
     }),
     shareReplay(1)
   );
-  // Re index nodes to come after the vendor nodes to render them
-  // after the vendors in the DOM
-  dataNodesReIndexed$ = combineLatest([
-    this.dataNodes$,
-    this.vendorNodes$,
-  ]).pipe(
-    map(([dataNodes, vendorNodes]) => {
-      const clonedNodes = cloneDeep(dataNodes);
-      clonedNodes.forEach((node, i) => {
-        node.id = vendorNodes.length + i;
-      });
-      return clonedNodes;
-    }),
-    shareReplay(1)
-  );
 
   // Edges
   edgeData$ = combineLatest([
-    this.dataNodesReIndexed$,
+    this.dataNodesFiltered$,
     this.selectionService.selectedNode$,
   ]).pipe(
     map(([allEntries, selectedNode]) => {
       const map = createStandardToDataEntryMap(allEntries);
       return generateEdges(allEntries, map, selectedNode);
     }),
-    tap((edges) => console.log("edgeemit", edges)),
     shareReplay(1)
   );
 
@@ -153,17 +162,19 @@ export class GraphComponent {
     shareReplay(1)
   );
   dataNodeSelection$ = combineLatest([
-    this.dataNodesReIndexed$,
+    this.dataNodesFiltered$,
     this.containerGraph$,
   ]).pipe(
-    map(([dataNodes, svg]) => this.initDataNodeSelection(dataNodes, svg)),
+    map(([dataNodes, svg]) => this.updateDataNodeSelection(dataNodes, svg)),
     shareReplay(1)
   );
   vendorNodeSelection$ = combineLatest([
     this.vendorNodes$,
     this.containerGraph$,
   ]).pipe(
-    map(([vendorNodes, svg]) => this.initVendorNodeSelection(vendorNodes, svg)),
+    map(([vendorNodes, svg]) =>
+      this.updateVendorNodeSelection(vendorNodes, svg)
+    ),
     shareReplay(1)
   );
 
@@ -173,43 +184,81 @@ export class GraphComponent {
     public searchService: SearchService,
     public optionsService: OptionsService
   ) {
-    // Kickoff and update simulation
-    combineLatest([
-      this.dataNodesReIndexed$,
+    // Kickoff simulation
+    zip([
+      this.dataNodesFiltered$,
       this.dataNodeSelection$,
       this.vendorNodes$,
       this.vendorNodeSelection$,
       this.edgeSelection$,
       this.colorService.colorMap$,
-    ]).subscribe((arg) => {
-      const [
-        dataNodes,
-        dataNodeSelection,
-        vendorNodes,
-        vendorNodeSelection,
-        edgeSelection,
+    ])
+      // .pipe(take(1))
+      .subscribe((arg) => {
+        const [
+          dataNodes,
+          dataNodeSelection,
+          vendorNodes,
+          vendorNodeSelection,
+          edgeSelection,
+          colorMap,
+        ] = arg;
+        const nodes = [...vendorNodes, ...dataNodes];
+        const ticked = this.buildTickFunction(
+          vendorNodeSelection,
+          dataNodeSelection,
+          edgeSelection,
+          colorMap
+        );
+
+        this.initSimulation(nodes, ticked);
+      });
+
+    // Update edge rendering, if changed
+    combineLatest([
+      zip(
+        this.dataNodesFiltered$,
+        this.dataNodeSelection$,
+        this.vendorNodes$,
+        this.vendorNodeSelection$
+      ),
+      this.colorService.colorMap$,
+      this.edgeSelection$,
+    ]).subscribe(
+      ([
+        [
+          dataNodesFiltered,
+          dataNodeSelection,
+          vendorNodes,
+          vendorNodeSelection,
+        ],
         colorMap,
-      ] = arg;
-      const nodes = [...vendorNodes, ...dataNodes];
-      const ticked = () => {
-        vendorNodeSelection.attr("transform", (d) => {
-          return `translate(${d.x}, ${d.y})`;
-        });
-        dataNodeSelection.attr("transform", (d) => {
-          return `translate(${d.x}, ${d.y})`;
-        });
-        edgeSelection
-          .attr("x1", (d: any) => d.source.x)
-          .attr("y1", (d: any) => d.source.y)
-          .attr("x2", (d: any) => d.target.x)
-          .attr("y2", (d: any) => d.target.y)
-          .attr("stroke", (d) => colorMap.get(d.standard));
-      };
-      if (this.sim != null) {
-        this.sim.on("tick", ticked);
-        this.sim.restart();
-      } else this.initSimulation(nodes, ticked);
-    });
+        edgeSelection,
+      ]) => {
+        const ticked = this.buildTickFunction(
+          vendorNodeSelection,
+          dataNodeSelection,
+          edgeSelection,
+          colorMap
+        );
+        this.sim?.on("tick", ticked);
+        this.sim?.restart();
+      }
+    );
+
+    // Update simulation nodes if changed
+    zip([this.dataNodesFiltered$, this.vendorNodes$])
+      .pipe(skip(1))
+      .subscribe(([dataNodes, vendorNodes]) => {
+        console.log("reheat", dataNodes);
+        const nodes = [...vendorNodes, ...dataNodes];
+        this.initializeForces(nodes);
+        this.sim?.alpha(0.5).restart();
+      });
+
+    // this.initializeForces(nodes);
+    // this.sim.alphaDecay(1);
+    // this.sim.restart();
 
     // Setup zoom event handler
     combineLatest([
@@ -253,28 +302,31 @@ export class GraphComponent {
     });
 
     // Effects, hover edges
-    combineLatest([
-      this.selectionService.hoveredNode$,
-      this.selectionService.selectedNode$,
-      this.edgeSelection$,
-      this.dataNodeSelection$,
-    ]).subscribe(([hoveredNode, selectedNode, edgeSelection]) => {
-      // Edges, hover
-      edgeSelection.attr("class", function (e) {
-        if (
-          selectedNode?.index == (e.source as any).index ||
-          selectedNode?.index == (e.target as any).index
-        ) {
-          return "selected";
-        } else if (
-          hoveredNode?.index == (e.source as any).index ||
-          hoveredNode?.index == (e.target as any).index
-        ) {
-          return "hovered";
-        }
-        return "";
+    combineLatest([this.selectionService.hoveredNode$])
+      .pipe(
+        withLatestFrom(
+          this.selectionService.selectedNode$,
+          this.edgeSelection$,
+          this.dataNodeSelection$
+        )
+      )
+      .subscribe(([[hoveredNode], selectedNode, edgeSelection]) => {
+        // Edges, hover
+        edgeSelection.attr("class", function (e) {
+          if (
+            selectedNode?.index == (e.source as any).index ||
+            selectedNode?.index == (e.target as any).index
+          ) {
+            return "selected";
+          } else if (
+            hoveredNode?.index == (e.source as any).index ||
+            hoveredNode?.index == (e.target as any).index
+          ) {
+            return "hovered";
+          }
+          return "";
+        });
       });
-    });
 
     // Effects, hover or search nodes
     combineLatest([
@@ -309,12 +361,7 @@ export class GraphComponent {
           .filter((d: IndexedDataNodeType) => {
             if (hoveredNode === d && selectedNode !== d) return true;
             else if (searchString == "") return false;
-            else if (
-              JSON.stringify(d, null, 0)
-                .toLowerCase()
-                .includes(searchString.toLowerCase()) &&
-              selectedNode !== d
-            )
+            else if (wildCardCompare(d, searchString) && selectedNode !== d)
               return true;
             else return false;
           })
@@ -331,12 +378,7 @@ export class GraphComponent {
             if (d === selectedNode) return false;
             else if (hoveredNode !== d) {
               if (searchString === "") return true;
-              else if (
-                !JSON.stringify(d, null, 0)
-                  .toLowerCase()
-                  .includes(searchString.toLowerCase())
-              )
-                return true;
+              else if (!wildCardCompare(d, searchString)) return true;
               else return false;
             } else return false;
           })
@@ -394,56 +436,57 @@ export class GraphComponent {
     });
 
     // Mouse handlers
-    combineLatest([
-      this.svg$,
-      this.dataNodesReIndexed$,
-      this.vendorNodes$,
-      this.dataNodeSelection$,
-    ]).subscribe(([svg, dataNodes, vendorNodes, nodeSelection]) => {
-      // Nodes
-      nodeSelection
-        .on("mouseover", (event, d) => {
-          event.stopPropagation();
-          this.selectionService.setHoveredNode(d);
-        })
-        .on("mouseout", (event, d) => {
-          event.stopPropagation();
-          this.selectionService.setHoveredNode(
-            this.selectionService.selectedNode
-          );
-        })
-        .on("click", (event) => {
-          // Handled instead by mousedown and mouseup, but `stopPropagation` is needed
-          // to prevent the backdrop click handler from triggering
-          event.stopPropagation();
-        })
-        .on("mousedown", (event, d) => {
-          // stopPropagation is needed for the zoom handler not to
-          // consume the mouseup event for some reason
-          // Also used to stop event propagation to the backdrop
-          event.stopPropagation();
-          this.selectionService.setActiveNode(d);
-        })
-        .on("mouseup", (event, d) => {
-          event.stopPropagation();
-          this.selectionService.setActiveNode(undefined);
-          this.colorService.generateColorMap(d.approvedStandards);
-          this.selectionService.setSelectedNode(d);
-          // this.initializeForces([...dataNodes, ...vendorNodes]);
-          // this.sim!.alpha(0.5).restart();
-        });
+    combineLatest([this.svg$, this.dataNodeSelection$]).subscribe(
+      ([svg, nodeSelection]) => {
+        // Nodes
+        nodeSelection
+          .on("mouseover", (event, d) => {
+            event.stopPropagation();
+            this.selectionService.setHoveredNode(d);
+          })
+          .on("mouseout", (event, d) => {
+            event.stopPropagation();
+            this.selectionService.setHoveredNode(
+              this.selectionService.selectedNode
+            );
+          })
+          .on("click", (event) => {
+            // Handled instead by mousedown and mouseup, but `stopPropagation` is needed
+            // to prevent the backdrop click handler from triggering
+            console.log("click");
+            event.stopPropagation();
+          })
+          .on("mousedown", (event, d) => {
+            // stopPropagation is needed for the zoom handler not to
+            // consume the mouseup event for some reason
+            // Also used to stop event propagation to the backdrop
+            console.log("mousedown");
+            event.stopPropagation();
+            this.selectionService.setActiveNode(d);
+          })
+          .on("mouseup", (event, d) => {
+            console.log("mouseup");
+            event.stopPropagation();
+            this.sim?.stop();
+            this.selectionService.setActiveNode(undefined);
+            this.colorService.generateColorMap(d.approvedStandards);
+            this.selectionService.setSelectedNode(d);
+          });
 
-      // Backdrop
-      svg
-        .on("click", (event) => {
-          event.stopPropagation();
-          this.selectionService.setSelectedNode(undefined);
-        })
-        .on("mouseover", (event) => {
-          event.stopPropagation();
-          this.selectionService.setHoveredNode(undefined);
-        });
-    });
+        // Backdrop
+        svg
+          .on("click", (event) => {
+            console.log("backdrop click", event);
+            event.stopPropagation();
+            this.selectionService.setSelectedNode(undefined);
+          })
+          .on("mouseover", (event) => {
+            console.log("mouseover backdrop");
+            event.stopPropagation();
+            this.selectionService.setHoveredNode(undefined);
+          });
+      }
+    );
   }
 
   ngAfterViewInit(): void {
@@ -471,7 +514,7 @@ export class GraphComponent {
       )
       .force(
         SimulationForce.VENDOR,
-        forceLink(linkDataNodesToVendors(nodes)).strength(0.2)
+        forceLink(linkDataNodesToVendors(nodes)).strength(0.4)
       )
       .alphaDecay(0.01)
       .velocityDecay(0.5)
@@ -493,7 +536,6 @@ export class GraphComponent {
               "subFontSize"
             > = {
               ...d,
-              id: i,
               x: randomXInWindow(),
               y: randomYInWindow(),
               r:
@@ -547,29 +589,41 @@ export class GraphComponent {
     return svg.append("g").attr("class", "line-group");
   }
 
-  initDataNodeSelection(nodes: DataNodeType[], svg: G): DataNodeSelectionType {
-    const g = svg
+  updateDataNodeSelection(
+    nodes: DataNodeType[],
+    svg: G
+  ): DataNodeSelectionType {
+    const gs = svg
       .selectAll(".data")
-      .data(nodes as IndexedDataNodeType[])
+      .data(nodes as IndexedDataNodeType[], (d) => (d as DataEntry).uuid)
       .join("g")
       .attr("class", "node data");
 
-    const circle = g
-      .append("circle")
-      .attr("r", (d) => d.r)
-      .attr("fill", (d) => {
-        const scaled = nodeScale(d.approvedStandards.length / 30);
-        return scaled.toString();
-      });
+    gs.each(function (d) {
+      const g = select(this);
+      let circle: Circle = g.select("circle");
+      if (circle.empty()) {
+        circle = g.append("circle");
+      }
+      circle
+        .attr("r", d.r)
+        .attr("fill", nodeScale(d.approvedStandards.length / 30).toString());
+    });
 
-    const mainText = g
-      .append("text")
-      .text((d) => d.productName)
-      .attr("font-size", (d) => d.mainFontSize)
-      .attr("fill", (d) => getFontColor(nodeScale(d.approvedStandards.length)))
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central")
-      .attr("class", "dot-text");
+    gs.each(function (d) {
+      const g = select(this);
+      let text: Text = g.select("text");
+      if (text.empty()) {
+        text = g
+          .append("text")
+          .text(d.productName)
+          .attr("font-size", d.mainFontSize)
+          .attr("fill", getFontColor(nodeScale(d.approvedStandards.length)))
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .attr("class", "dot-text");
+      }
+    });
 
     // TODO: Position this correctly
     // const subText = g
@@ -581,43 +635,72 @@ export class GraphComponent {
     //   .attr("transform", (d) => `translate(0,${d.mainFontSize * 0.75})`)
     //   .attr("class", "dot-text");
 
-    return g;
+    return gs;
   }
 
-  initVendorNodeSelection(
+  updateVendorNodeSelection(
     nodes: VendorNodeType[],
     container: G
   ): VendorNodeSelectionType {
-    const g = container
+    const gs = container
       .selectAll(".vendor")
-      .data(nodes as IndexedVendorNodeType[])
-      .join((enter) =>
-        enter
-          .insert("g", ":first-child") // Insert new nodes as first children
-          .attr("class", "node vendor")
+      .data(
+        nodes as IndexedVendorNodeType[],
+        (d) => (d as IndexedVendorNodeType).vendor
       )
-      .attr("class", "node vendor");
+      .join("g")
+      .attr("class", "node vendor")
+      .lower();
 
-    const circle = g
-      .append("circle")
-      .attr("r", (d) => d.r)
-      .attr("fill", "url(#radial-gradient)");
+    gs.each(function (d) {
+      const g = select(this);
+      let circle: Circle = g.select("circle");
+      if (circle.empty()) {
+        circle = g.append("circle").attr("fill", "url(#radial-gradient)");
+      }
+      circle.attr("r", d.r);
+    });
 
-    const mainText = g
-      .append("text")
-      .text((d) => d.vendor)
-      .attr("font-size", (d) =>
-        calculateFontSizeForCircle(
-          d.vendor.length,
-          this.vendorNodeTextPxWidth,
-          this.circlePaddingFraction
-        )
-      )
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central")
-      .attr("class", "dot-text");
+    // // TODO: Dont recreate on emit
+    // const mainText = gs.select("text");
+    // if (mainText.empty()) {
+    //   gs.append("text")
+    //     .text((d) => d.vendor)
+    //     .attr("font-size", (d) =>
+    //       calculateFontSizeForCircle(
+    //         d.vendor.length,
+    //         this.vendorNodeTextPxWidth,
+    //         this.circlePaddingFraction
+    //       )
+    //     )
+    //     .attr("text-anchor", "middle")
+    //     .attr("dominant-baseline", "central")
+    //     .attr("class", "dot-text");
+    // }
+    const vendorNodeTextPxWidth = this.vendorNodeTextPxWidth;
+    const circlePaddingFraction = this.circlePaddingFraction;
+    gs.each(function (d) {
+      const g = select(this);
+      let text: Text = g.select("text");
+      if (text.empty()) {
+        text = g
+          .append("text")
+          .text(d.vendor)
+          .attr(
+            "font-size",
+            calculateFontSizeForCircle(
+              d.vendor.length,
+              vendorNodeTextPxWidth,
+              circlePaddingFraction
+            )
+          )
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .attr("class", "dot-text");
+      }
+    });
 
-    return g;
+    return gs;
   }
 
   initEdgeSelection(edges: Edge<DataEntry>[], lineGroup: G) {
@@ -630,8 +713,35 @@ export class GraphComponent {
   }
 
   initializeForces(nodes: (DataNodeType | VendorNodeType)[]) {
-    this.sim!.force(SimulationForce.VENDOR)!.initialize!(nodes, Math.random);
+    console.log("reinit forces for nodes", nodes);
+    this.sim?.nodes(nodes);
+    this.sim!.force(
+      SimulationForce.VENDOR,
+      forceLink(linkDataNodesToVendors(nodes)).strength(0.4)
+    );
     this.sim!.force(SimulationForce.GRAVITY)!.initialize!(nodes, Math.random);
     this.sim!.force(SimulationForce.COLLISION)!.initialize!(nodes, Math.random);
+  }
+
+  buildTickFunction(
+    vendorNodeSelection: VendorNodeSelectionType,
+    dataNodeSelection: DataNodeSelectionType,
+    edgeSelection: EdgeSelectionType,
+    colorMap: ColorMap | undefined
+  ): () => void {
+    return () => {
+      vendorNodeSelection.attr("transform", (d) => {
+        return `translate(${d.x}, ${d.y})`;
+      });
+      dataNodeSelection.attr("transform", (d) => {
+        return `translate(${d.x}, ${d.y})`;
+      });
+      edgeSelection
+        .attr("x1", (d: any) => d.source.x)
+        .attr("y1", (d: any) => d.source.y)
+        .attr("x2", (d: any) => d.target.x)
+        .attr("y2", (d: any) => d.target.y)
+        .attr("stroke", (d) => colorMap?.get(d.standard)?.hex() ?? "black");
+    };
   }
 }

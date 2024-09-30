@@ -51,5 +51,6 @@ export class SearchComponent {
 
   public enter() {
     this.confirmSearch.emit(true);
+    if (this.searchInput) this.searchInput.nativeElement.blur();
   }
 }

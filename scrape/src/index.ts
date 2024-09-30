@@ -1,6 +1,7 @@
-import fetch from "node-fetch";
 import { load } from "cheerio";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
+import fetch from "node-fetch";
 import { Channel, DataRecord, Standard } from "./data.model";
 import {
   extractParenthesizedSubstring,
@@ -22,7 +23,7 @@ fetch(
     const dataEntriesHashTable: Map<string, DataRecord> = new Map();
     trs.each((i, row) => {
       const standard: Partial<Standard> = {};
-      const record = new DataRecord();
+      const record = new DataRecord(randomUUID());
 
       $(row)
         .find("td, th")

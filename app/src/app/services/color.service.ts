@@ -1,7 +1,13 @@
 import { Injectable } from "@angular/core";
 import { Color, hex } from "chroma-js";
 import { cloneDeep, isEqual } from "lodash-es";
-import { BehaviorSubject, distinctUntilChanged, map, shareReplay } from "rxjs";
+import {
+  BehaviorSubject,
+  distinctUntilChanged,
+  map,
+  Observable,
+  shareReplay,
+} from "rxjs";
 import { palettes } from "../helpers/color.palettes";
 import { Standard } from "../models/data.model";
 import { ColorMap } from "./color.model";
@@ -17,11 +23,12 @@ export class ColorService {
   private colorMapSubject = new BehaviorSubject<ColorMap | undefined>(
     undefined
   );
-  public colorMap$ = this.colorMapSubject.pipe(
-    distinctUntilChanged(isEqual),
-    shareReplay(1),
-    map(cloneDeep)
-  );
+  public colorMap$: Observable<ColorMap | undefined> =
+    this.colorMapSubject.pipe(
+      distinctUntilChanged(isEqual),
+      shareReplay(1),
+      map(cloneDeep)
+    );
 
   public generateColorMap(standards: Standard[]) {
     const paletteToUse = palettes[standards.length];

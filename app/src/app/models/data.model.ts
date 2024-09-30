@@ -1,6 +1,7 @@
 import { SimulationNodeDatum } from "d3";
 
 export interface DataEntry extends SimulationNodeDatum {
+  uuid: string;
   productName: string;
   vendor?: string;
   systemType?: string;

@@ -1,5 +1,5 @@
 import { quadtree } from "d3-quadtree";
-import { isNodeVendorType } from "../models/app.model";
+import { isNodeVendorType, NodeUnionType } from "../models/app.model";
 let debug = false;
 setTimeout(() => {
   debug = true;
@@ -33,8 +33,7 @@ export function vendorCollide(radius, sameVendorRadius, interVendorRadius) {
       // @ts-expect-error
       n = nodes.length,
       tree,
-      // @ts-expect-error
-      node,
+      node: NodeUnionType | ErrorOptions | undefined,
       // @ts-expect-error
       xi,
       // @ts-expect-error
@@ -53,7 +52,9 @@ export function vendorCollide(radius, sameVendorRadius, interVendorRadius) {
         node = nodes[i];
         // @ts-expect-error
         (ri = radii[node.index]), (ri2 = ri * ri);
+        // @ts-expect-error
         xi = node.x + node.vx;
+        // @ts-expect-error
         yi = node.y + node.vy;
         tree.visit(apply);
       }
@@ -93,10 +94,13 @@ export function vendorCollide(radius, sameVendorRadius, interVendorRadius) {
             // @ts-expect-error
           } else if (oneOfNodesIsVendor && node.vendor === data.vendor) {
             // @ts-expect-error
-            if (!isNodeVendorType(node))
-              throw new Error(
-                "node not type vendor, have render order been switched?"
+            if (!isNodeVendorType(node)) {
+              console.error(
+                "node not type vendor, have render order been switched?",
+                node,
+                data
               );
+            }
             // if (debug) debugger;
             // rj = sameVendorRadius;
             // // @ts-expect-error

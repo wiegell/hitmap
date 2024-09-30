@@ -4,7 +4,8 @@ import { Standard } from "../models/data.model";
 export class ColorMap {
   private _map: Map<string, Color>;
 
-  public get(standard: Standard) {
+  public get(standard?: Standard) {
+    if (standard == null) return undefined;
     return this._map.get(ColorMap.hash(standard));
   }
   public set(standard: Standard, color: Color) {

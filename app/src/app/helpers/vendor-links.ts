@@ -20,11 +20,13 @@ export function linkDataNodesToVendors(
   );
   return flatMap(
     Object.entries(dataNodesByVendor).map(([vendor, nodes]) =>
-      nodes.map((node) => ({
-        // There should only ever be one vendor node with the same name
-        source: vendorNodesByVendor[vendor][0],
-        target: node,
-      }))
+      nodes.map((node) => {
+        return {
+          // There should only ever be one vendor node with the same name
+          source: vendorNodesByVendor[vendor][0],
+          target: node,
+        };
+      })
     )
   );
 }

@@ -18,16 +18,16 @@
       }}
     </i>
   </p>
-  @for (supportedStandard of selectedNode.approvedStandards; track
-  supportedStandard){
+  @if((colorMap$ | async); as colorMap){ @for (supportedStandard of
+  selectedNode.approvedStandards; track supportedStandard){
   <p>
     <span
       class="blob"
-      [style.background]="supportedStandard | colorMap : (colorMap$ | async)"
+      [style.background]="supportedStandard | colorMap : colorMap"
     ></span>
     {{ supportedStandard.name }} ({{ supportedStandard.version }})
   </p>
-  }
+  } }
 </div>
 
 }
