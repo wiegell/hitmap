@@ -38,7 +38,7 @@ jobs:
         shell: bash
         working-directory: ./app
       - name: Build
-        run: yarn ng build
+        run: yarn ng build --base-href='./hitmap'
         shell: bash
         working-directory: ./app
       - name: Upload artifact
