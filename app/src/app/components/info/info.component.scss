@@ -2,6 +2,7 @@
   pointer-events: none;
   display: flex;
   align-items: flex-start;
+  overflow-y: auto;
 }
 
 .hovered {
@@ -18,8 +19,16 @@
   padding: 5px;
 }
 
-.blob {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+.standard-line {
+  cursor: pointer;
+  &:hover {
+    background-color: rgba(var(--standard-color), 0.5);
+  }
+
+  .blob {
+    display: inline-block;
+    background-color: rgb(var(--standard-color));
+    width: 10px;
+    height: 10px;
+  }
 }

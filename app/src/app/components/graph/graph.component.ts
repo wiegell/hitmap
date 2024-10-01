@@ -2,9 +2,10 @@ import { Component, ElementRef, ViewChild } from "@angular/core";
 import {
   D3ZoomEvent,
   easeCubicOut,
-  forceCenter,
   forceLink,
   forceSimulation,
+  forceX,
+  forceY,
   select,
   Selection,
   Simulation,
@@ -256,10 +257,6 @@ export class GraphComponent {
         this.sim?.alpha(0.5).restart();
       });
 
-    // this.initializeForces(nodes);
-    // this.sim.alphaDecay(1);
-    // this.sim.restart();
-
     // Setup zoom event handler
     combineLatest([
       this.svg$,
@@ -339,9 +336,7 @@ export class GraphComponent {
       ([backDrop, nodeSelection, selectedNode, hoveredNode, searchString]) => {
         // Backdrop
         if (searchString == "") {
-          setTimeout(() => {
-            backDrop.lower();
-          }, 500);
+          // The backdrop is also lowered after 500 ms. in a debounced subscription above
           backDrop
             .select("rect")
             .transition()
@@ -359,9 +354,13 @@ export class GraphComponent {
         // Node, hover
         nodeSelection
           .filter((d: IndexedDataNodeType) => {
-            if (hoveredNode === d && selectedNode !== d) return true;
+            if (hoveredNode?.uuid === d.uuid && selectedNode?.uuid !== d.uuid)
+              return true;
             else if (searchString == "") return false;
-            else if (wildCardCompare(d, searchString) && selectedNode !== d)
+            else if (
+              wildCardCompare(d, searchString) &&
+              selectedNode?.uuid !== d.uuid
+            )
               return true;
             else return false;
           })
@@ -403,33 +402,29 @@ export class GraphComponent {
       // Node, active
       nodeSelection
         .filter(
-          (d: IndexedDataNodeType) => activeNode === d && selectedNode !== d
+          (d: IndexedDataNodeType) =>
+            activeNode?.uuid === d.uuid && selectedNode?.uuid !== d.uuid
         )
         .select("circle")
         .attr("r", (d) => d.r + this.activeRadiusPxAddition);
       nodeSelection
         .filter(
-          (d: IndexedDataNodeType) => activeNode !== d && selectedNode !== d
+          (d: IndexedDataNodeType) =>
+            activeNode?.uuid !== d.uuid && selectedNode?.uuid !== d.uuid
         )
         .select("circle")
         .attr("r", (d) => d.base_r);
-    });
 
-    // Effects, nodes selected
-    combineLatest([
-      this.dataNodeSelection$,
-      this.selectionService.selectedNode$,
-      this.selectionService.activeNode$,
-    ]).subscribe(([nodeSelection, selectedNode, activeNode]) => {
-      // Node, active
+      // Node, selected
       nodeSelection
-        .filter((d: IndexedDataNodeType) => selectedNode === d)
+        .filter((d: IndexedDataNodeType) => selectedNode?.uuid === d.uuid)
         .select("circle")
         .attr("stroke", "white")
         .attr("r", (d) => d.r + this.activeRadiusPxAddition);
       nodeSelection
         .filter(
-          (d: IndexedDataNodeType) => activeNode !== d && selectedNode !== d
+          (d: IndexedDataNodeType) =>
+            activeNode?.uuid !== d.uuid && selectedNode?.uuid !== d.uuid
         )
         .select("circle")
         .attr("r", (d) => d.base_r);
@@ -510,14 +505,16 @@ export class GraphComponent {
       .force(SimulationForce.COLLISION, collisionForce)
       .force(
         SimulationForce.GRAVITY,
-        forceCenter(window.innerWidth / 2, window.innerHeight / 2).strength(0.5)
+        forceX(window.innerWidth / 2).strength(0.03)
       )
+      .force("arst", forceY(window.innerHeight / 2).strength(0.03))
       .force(
         SimulationForce.VENDOR,
-        forceLink(linkDataNodesToVendors(nodes)).strength(0.4)
+        forceLink(linkDataNodesToVendors(nodes)).strength(1)
       )
-      .alphaDecay(0.01)
-      .velocityDecay(0.5)
+      // .alphaDecay(0.01)
+      // .velocityDecay(0.5)
+      // .alpha(1)
       .on("tick", ticked);
   }
 

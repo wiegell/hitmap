@@ -20,7 +20,7 @@ export class SearchComponent {
   @Output() textChange = new EventEmitter<string>();
   @Input() set text(str: string) {
     this._searchStr = str;
-    if (this._searchStr == "") this.expanded = false;
+    this.expanded = !(this._searchStr == "");
   }
   @Output() confirmSearch = new EventEmitter<boolean>();
 
