@@ -1,11 +1,15 @@
 import { Component, ElementRef, ViewChild } from "@angular/core";
 import {
+  curveCatmullRomClosed,
   D3ZoomEvent,
   easeCubicOut,
   forceLink,
   forceSimulation,
   forceX,
   forceY,
+  line,
+  polygonCentroid,
+  polygonHull,
   select,
   Selection,
   Simulation,
@@ -154,6 +158,10 @@ export class GraphComponent {
     map(this.initSearchBackDrop),
     shareReplay(1)
   );
+  groupingContainer$ = this.containerGraph$.pipe(
+    map((g) => g.append("g").attr("class", "grouping")),
+    shareReplay(1)
+  );
   lineGroup$ = this.containerGraph$.pipe(
     map(this.initLineGroup),
     shareReplay(1)
@@ -193,8 +201,9 @@ export class GraphComponent {
       this.vendorNodeSelection$,
       this.edgeSelection$,
       this.colorService.colorMap$,
+      this.groupingContainer$,
     ])
-      // .pipe(take(1))
+      .pipe(take(1))
       .subscribe((arg) => {
         const [
           dataNodes,
@@ -203,13 +212,15 @@ export class GraphComponent {
           vendorNodeSelection,
           edgeSelection,
           colorMap,
+          groupingContainer,
         ] = arg;
         const nodes = [...vendorNodes, ...dataNodes];
         const ticked = this.buildTickFunction(
           vendorNodeSelection,
           dataNodeSelection,
           edgeSelection,
-          colorMap
+          colorMap,
+          groupingContainer
         );
 
         this.initSimulation(nodes, ticked);
@@ -225,27 +236,33 @@ export class GraphComponent {
       ),
       this.colorService.colorMap$,
       this.edgeSelection$,
-    ]).subscribe(
-      ([
-        [
-          dataNodesFiltered,
-          dataNodeSelection,
-          vendorNodes,
-          vendorNodeSelection,
-        ],
-        colorMap,
-        edgeSelection,
-      ]) => {
-        const ticked = this.buildTickFunction(
-          vendorNodeSelection,
-          dataNodeSelection,
-          edgeSelection,
-          colorMap
-        );
-        this.sim?.on("tick", ticked);
-        this.sim?.restart();
-      }
-    );
+    ])
+      .pipe(withLatestFrom(this.groupingContainer$))
+      .subscribe(
+        ([
+          [
+            [
+              dataNodesFiltered,
+              dataNodeSelection,
+              vendorNodes,
+              vendorNodeSelection,
+            ],
+            colorMap,
+            edgeSelection,
+          ],
+          groupingContainer,
+        ]) => {
+          const ticked = this.buildTickFunction(
+            vendorNodeSelection,
+            dataNodeSelection,
+            edgeSelection,
+            colorMap,
+            groupingContainer
+          );
+          this.sim?.on("tick", ticked);
+          this.sim?.restart();
+        }
+      );
 
     // Update simulation nodes if changed
     zip([this.dataNodesFiltered$, this.vendorNodes$])
@@ -724,8 +741,13 @@ export class GraphComponent {
     vendorNodeSelection: VendorNodeSelectionType,
     dataNodeSelection: DataNodeSelectionType,
     edgeSelection: EdgeSelectionType,
-    colorMap: ColorMap | undefined
+    colorMap: ColorMap | undefined,
+    groupingContainer: G
   ): () => void {
+    const lineGenerator = line()
+      .x((d) => d[0])
+      .y((d) => d[1])
+      .curve(curveCatmullRomClosed);
     return () => {
       vendorNodeSelection.attr("transform", (d) => {
         return `translate(${d.x}, ${d.y})`;
@@ -739,6 +761,43 @@ export class GraphComponent {
         .attr("x2", (d: any) => d.target.x)
         .attr("y2", (d: any) => d.target.y)
         .attr("stroke", (d) => colorMap?.get(d.standard)?.hex() ?? "black");
+
+      const filteredNodes = dataNodeSelection.filter(
+        (d) => d.vendor === "Rados"
+      );
+      const coordinates = filteredNodes
+        .data()
+        .map((data) => [data.x, data.y] as [number, number]);
+      const centroid = polygonCentroid(coordinates);
+      const scaleFactor = 1.5;
+      const scaledCoordinates = coordinates.map((point: [number, number]) => {
+        return [
+          centroid[0] + (point[0] - centroid[0]) * scaleFactor,
+          centroid[1] + (point[1] - centroid[1]) * scaleFactor,
+        ] as [number, number];
+      });
+      if (scaledCoordinates.some(([x, y]) => x < 0 || y < 0)) {
+        console.log("scaledcoordinates", coordinates, scaledCoordinates);
+      }
+      const polygon = polygonHull(scaledCoordinates);
+
+      const centroidBullet = groupingContainer
+        .selectAll(".centroid")
+        .data([null])
+        .join("circle")
+        .attr("class", ".centroid")
+        .attr("cx", centroid[0])
+        .attr("cy", centroid[1])
+        .attr("r", 10)
+        .attr("fill", "blue");
+      const path = groupingContainer
+        .selectAll("path")
+        .data([null])
+        .join("path");
+      path
+        .attr("d", lineGenerator(polygon ?? []))
+        .attr("fill", "rgba(255,0,0,0.5)")
+        .attr("transform");
     };
   }
 }
